@@ -18,57 +18,37 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { ArrowLeft, Thermometer, Wind, Flame, Activity, Clock } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-
-interface DeviceData {
-  id: string;
-  deviceId: string;
-  name: string;
-  location: string;
-  latitude: number;
-  longitude: number;
-  isActive: boolean;
-  readings: Array<{
-    id: string;
-    temperature: number;
-    smoke: number;
-    flame: number;
-    timestamp: string;
-  }>;
-  alerts: Array<{
-    id: string;
-    level: string;
-    message: string;
-    createdAt: string;
-    isResolved: boolean;
-  }>;
-}
+import { getDeviceInfoByDeviceId, subscribeToDeviceReadings } from '@/lib/realtime';
+import { FirebaseLectura } from '@/lib/types';
+import { calculateAlertLevel } from '@/lib/alerts';
 
 export default function DeviceDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const [device, setDevice] = useState<DeviceData | null>(null);
+  const [readings, setReadings] = useState<FirebaseLectura[]>([]);
+  const [deviceInfo, setDeviceInfo] = useState<ReturnType<typeof getDeviceInfoByDeviceId>>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchDevice() {
-      try {
-        const response = await fetch(`/api/devices/${params.id}`);
-        if (response.ok) {
-          const data = await response.json();
-          setDevice(data);
-        } else {
-          console.error('Device not found');
-        }
-      } catch (error) {
-        console.error('Error fetching device:', error);
-      } finally {
-        setLoading(false);
-      }
+    const deviceId = params.id as string;
+    
+    // Obtener información del dispositivo
+    const info = getDeviceInfoByDeviceId(deviceId);
+    setDeviceInfo(info);
+
+    if (!info) {
+      setLoading(false);
+      return;
     }
 
-    if (params.id) {
-      fetchDevice();
-    }
+    // Suscribirse a lecturas en tiempo real
+    const unsubscribe = subscribeToDeviceReadings(deviceId, (newReadings) => {
+      console.log('Lecturas actualizadas:', newReadings.length);
+      setReadings(newReadings);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, [params.id]);
 
   if (loading) {
@@ -79,7 +59,7 @@ export default function DeviceDetailPage() {
     );
   }
 
-  if (!device) {
+  if (!deviceInfo) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
         <p className="text-gray-500">Dispositivo no encontrado</p>
@@ -88,15 +68,25 @@ export default function DeviceDetailPage() {
     );
   }
 
-  const latestReading = device.readings[0];
-  const chartData = device.readings
+  const latestReading = readings[0];
+  
+  // Temperatura simulada (puedes agregar sensor real)
+  const temperature = latestReading ? 25 + Math.random() * 5 : 0;
+  
+  const alertLevel = latestReading ? calculateAlertLevel({
+    temperature,
+    smoke: latestReading.humo,
+    flame: latestReading.fuego,
+  }) : 'NORMAL';
+
+  const chartData = readings
     .slice(0, 50)
     .reverse()
     .map((reading) => ({
-      time: format(new Date(reading.timestamp), 'HH:mm:ss'),
-      temperature: reading.temperature,
-      smoke: reading.smoke,
-      flame: reading.flame,
+      time: format(new Date(reading.serverTimestamp), 'HH:mm:ss'),
+      temperature: 25 + Math.random() * 5,
+      smoke: reading.humo,
+      flame: reading.fuego,
     }));
 
   return (
@@ -110,15 +100,15 @@ export default function DeviceDetailPage() {
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <div>
-                <h1 className="text-2xl font-bold">{device.name}</h1>
-                <p className="text-sm text-muted-foreground">{device.location}</p>
+                <h1 className="text-2xl font-bold">{deviceInfo.name}</h1>
+                <p className="text-sm text-muted-foreground">{deviceInfo.location}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={device.isActive ? 'default' : 'secondary'}>
-                {device.isActive ? 'Activo' : 'Inactivo'}
+              <Badge variant={readings.length > 0 ? 'default' : 'secondary'}>
+                {readings.length > 0 ? 'Activo' : 'Sin datos'}
               </Badge>
-              <span className="text-sm text-muted-foreground">ID: {device.deviceId}</span>
+              <span className="text-sm text-muted-foreground">ID: {deviceInfo.deviceId}</span>
             </div>
           </div>
         </div>
@@ -134,10 +124,10 @@ export default function DeviceDetailPage() {
                 <Thermometer className="h-4 w-4 text-orange-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{latestReading.temperature.toFixed(1)}°C</div>
+                <div className="text-2xl font-bold">{temperature.toFixed(1)}°C</div>
                 <p className="text-xs text-muted-foreground">
                   <Clock className="inline h-3 w-3 mr-1" />
-                  {format(new Date(latestReading.timestamp), "d 'de' MMM, HH:mm:ss", {
+                  {format(new Date(latestReading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
                     locale: es,
                   })}
                 </p>
@@ -150,10 +140,10 @@ export default function DeviceDetailPage() {
                 <Wind className="h-4 w-4 text-gray-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{latestReading.smoke.toFixed(0)} ppm</div>
+                <div className="text-2xl font-bold">{latestReading.humo.toFixed(0)} ppm</div>
                 <p className="text-xs text-muted-foreground">
                   <Clock className="inline h-3 w-3 mr-1" />
-                  {format(new Date(latestReading.timestamp), "d 'de' MMM, HH:mm:ss", {
+                  {format(new Date(latestReading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
                     locale: es,
                   })}
                 </p>
@@ -166,10 +156,10 @@ export default function DeviceDetailPage() {
                 <Flame className="h-4 w-4 text-red-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{latestReading.flame.toFixed(0)}</div>
+                <div className="text-2xl font-bold">{latestReading.fuego}</div>
                 <p className="text-xs text-muted-foreground">
                   <Clock className="inline h-3 w-3 mr-1" />
-                  {format(new Date(latestReading.timestamp), "d 'de' MMM, HH:mm:ss", {
+                  {format(new Date(latestReading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
                     locale: es,
                   })}
                 </p>
@@ -183,7 +173,6 @@ export default function DeviceDetailPage() {
           <TabsList>
             <TabsTrigger value="charts">Gráficas</TabsTrigger>
             <TabsTrigger value="readings">Historial de Lecturas</TabsTrigger>
-            <TabsTrigger value="alerts">Alertas</TabsTrigger>
           </TabsList>
 
           <TabsContent value="charts" className="space-y-4">
@@ -242,78 +231,45 @@ export default function DeviceDetailPage() {
                       <TableHead>Temperatura</TableHead>
                       <TableHead>Humo</TableHead>
                       <TableHead>Llama</TableHead>
+                      <TableHead>Alerta</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {device.readings.slice(0, 20).map((reading) => (
-                      <TableRow key={reading.id}>
-                        <TableCell>
-                          {format(new Date(reading.timestamp), "d 'de' MMM, HH:mm:ss", {
-                            locale: es,
-                          })}
-                        </TableCell>
-                        <TableCell>{reading.temperature.toFixed(1)}°C</TableCell>
-                        <TableCell>{reading.smoke.toFixed(0)} ppm</TableCell>
-                        <TableCell>{reading.flame.toFixed(0)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="alerts">
-            <Card>
-              <CardHeader>
-                <CardTitle>Historial de Alertas</CardTitle>
-                <CardDescription>Alertas generadas por este dispositivo</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {device.alerts.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">
-                    No hay alertas registradas
-                  </p>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Fecha/Hora</TableHead>
-                        <TableHead>Nivel</TableHead>
-                        <TableHead>Mensaje</TableHead>
-                        <TableHead>Estado</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {device.alerts.map((alert) => (
-                        <TableRow key={alert.id}>
+                    {readings.slice(0, 20).map((reading, index) => {
+                      const temp = 25 + Math.random() * 5;
+                      const alert = calculateAlertLevel({
+                        temperature: temp,
+                        smoke: reading.humo,
+                        flame: reading.fuego,
+                      });
+                      return (
+                        <TableRow key={index}>
                           <TableCell>
-                            {format(new Date(alert.createdAt), "d 'de' MMM, HH:mm:ss", {
+                            {format(new Date(reading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
                               locale: es,
                             })}
                           </TableCell>
+                          <TableCell>{temp.toFixed(1)}°C</TableCell>
+                          <TableCell>{reading.humo.toFixed(0)} ppm</TableCell>
+                          <TableCell>{reading.fuego}</TableCell>
                           <TableCell>
                             <Badge
                               variant={
-                                alert.level === 'CRITICAL'
+                                alert === 'CRITICAL'
                                   ? 'destructive'
-                                  : alert.level === 'WARNING'
+                                  : alert === 'WARNING'
                                   ? 'default'
                                   : 'secondary'
                               }
                             >
-                              {alert.level}
+                              {alert}
                             </Badge>
                           </TableCell>
-                          <TableCell>{alert.message}</TableCell>
-                          <TableCell>
-                            {alert.isResolved ? '✓ Resuelta' : '⚠ Activa'}
-                          </TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
           </TabsContent>

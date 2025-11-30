@@ -1,0 +1,62 @@
+{
+  "device-info": {
+    "estacionamiento": {
+      "name": "Estacionamiento",
+      "location": "Estacionamiento",
+      "latitude": 20.70476770442253,
+      "longitude": -100.4441135875159
+    },
+    "salones_d": {
+      "name": "Entrada Principal",
+      "location": "Entrada",
+      "latitude": 20.7037869485072,
+      "longitude": -100.4429250984333
+    },
+    "cafeteria": {
+      "name": "Entrada Edificio",
+      "location": "Entrada / Fachada",
+      "latitude": 20.7042037705179,
+      "longitude": -100.4436296150508
+    },
+    "innovacion": {
+      "name": "Patio Trasero",
+      "location": "Exterior / Patio trasero",
+      "latitude": 20.70284786439671,
+      "longitude": -100.4430410311724
+    }
+  },
+  "devices": {
+    "estacionamiento": {
+      "temperature": 25.5,
+      "smoke": 50,
+      "flame": 0,
+      "alertLevel": "NORMAL",
+      "timestamp": 1732924800000,
+      "isOnline": true
+    },
+    "salones_d": {
+      "temperature": 24.8,
+      "smoke": 30,
+      "flame": 0,
+      "alertLevel": "NORMAL",
+      "timestamp": 1732924800000,
+      "isOnline": true
+    },
+    "cafeteria": {
+      "temperature": 26.2,
+      "smoke": 45,
+      "flame": 0,
+      "alertLevel": "NORMAL",
+      "timestamp": 1732924800000,
+      "isOnline": true
+    },
+    "innovacion": {
+      "temperature": 23.9,
+      "smoke": 35,
+      "flame": 0,
+      "alertLevel": "NORMAL",
+      "timestamp": 1732924800000,
+      "isOnline": true
+    }
+  }
+}
