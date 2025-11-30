@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import DeviceList from '@/components/DeviceList';
 import { DeviceMapMarker, RealtimeDeviceData } from '@/lib/types';
-import { subscribeToAllDevices } from '@/lib/realtime';
+import { subscribeToAllDevices, getAllDeviceInfo } from '@/lib/realtime';
 import { AlertCircle, Flame, Activity } from 'lucide-react';
 
 // Importar mapa dinámicamente para evitar SSR issues con Leaflet
@@ -24,43 +24,31 @@ export default function Dashboard() {
   const [realtimeData, setRealtimeData] = useState<Record<string, RealtimeDeviceData>>({});
   const [loading, setLoading] = useState(true);
 
-  // Cargar dispositivos desde API (PostgreSQL)
+  // Cargar información estática de dispositivos desde Firebase
   useEffect(() => {
-    async function fetchDevices() {
+    async function loadDeviceInfo() {
       try {
-        const response = await fetch('/api/devices');
-        if (response.ok) {
-          const data = await response.json();
-          
-          // Transformar datos de la API a formato de mapa
-          const mapDevices: DeviceMapMarker[] = data.map((device: any) => ({
-            deviceId: device.deviceId,
-            name: device.name,
-            location: device.location,
-            latitude: device.latitude,
-            longitude: device.longitude,
-            alertLevel: device.alerts?.[0]?.level || 'NORMAL',
-            lastReading: device.readings?.[0]
-              ? {
-                  temperature: device.readings[0].temperature,
-                  smoke: device.readings[0].smoke,
-                  flame: device.readings[0].flame,
-                  timestamp: new Date(device.readings[0].timestamp),
-                }
-              : undefined,
-            isOnline: false, // Se actualizará con Firebase
-          }));
-          
-          setDevices(mapDevices);
-        }
+        const deviceInfo = await getAllDeviceInfo();
+        
+        // Crear dispositivos iniciales con la información estática
+        const initialDevices: DeviceMapMarker[] = Object.entries(deviceInfo).map(([deviceId, info]) => ({
+          deviceId,
+          name: info.name,
+          location: info.location,
+          latitude: info.latitude,
+          longitude: info.longitude,
+          alertLevel: 'NORMAL' as const,
+          isOnline: false,
+        }));
+        
+        setDevices(initialDevices);
       } catch (error) {
-        console.error('Error fetching devices:', error);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchDevices();
+    loadDeviceInfo();
   }, []);
 
   // Suscribirse a datos en tiempo real (Firebase)
@@ -164,8 +152,6 @@ export default function Dashboard() {
                 ) : (
                   <DeviceMap
                     devices={devices}
-                    center={[25.6866, -100.3161]} // Coordenadas mock - actualizar con tu ubicación
-                    zoom={18}
                     onDeviceClick={(deviceId) => {
                       // Navegar a página de detalle
                       window.location.href = `/device/${deviceId}`;

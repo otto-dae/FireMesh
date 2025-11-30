@@ -47,6 +47,21 @@ export interface RealtimeDeviceData {
   isOnline: boolean;
 }
 
+// Estructura real de Firebase para lecturas
+export interface FirebaseLectura {
+  fuego: number;
+  humo: number;
+  nodeId: number;
+  serverTimestamp: number;
+  timestamp: number;
+  type: string;
+}
+
+export interface FirebaseNode {
+  lecturas: Record<string, FirebaseLectura>;
+  ultimaConexion: number;
+}
+
 // Tipo para datos que llegan desde MQTT (ESP32)
 export interface MQTTSensorPayload {
   deviceId: string;

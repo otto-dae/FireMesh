@@ -1,4 +1,4 @@
-import { AlertLevel, AlertThresholds, MQTTSensorPayload } from './types';
+import { AlertLevel, AlertThresholds } from './types';
 
 // Umbrales por defecto para alertas
 export const DEFAULT_THRESHOLDS: AlertThresholds = {
@@ -20,7 +20,11 @@ export const DEFAULT_THRESHOLDS: AlertThresholds = {
  * Calcula el nivel de alerta basado en lecturas de sensores
  */
 export function calculateAlertLevel(
-  data: MQTTSensorPayload,
+  data: {
+    temperature: number;
+    smoke: number;
+    flame: number;
+  },
   thresholds: AlertThresholds = DEFAULT_THRESHOLDS
 ): AlertLevel {
   const { temperature, smoke, flame } = data;
@@ -51,7 +55,11 @@ export function calculateAlertLevel(
  */
 export function generateAlertMessage(
   level: AlertLevel,
-  data: MQTTSensorPayload
+  data: {
+    temperature: number;
+    smoke: number;
+    flame: number;
+  }
 ): string {
   const { temperature, smoke, flame } = data;
 
@@ -108,12 +116,12 @@ export function getAlertColor(level: AlertLevel): string {
 export function getAlertHexColor(level: AlertLevel): string {
   switch (level) {
     case 'CRITICAL':
-      return '#ef4444'; // red-500
+      return '#ef4444';
     case 'WARNING':
-      return '#eab308'; // yellow-500
+      return '#eab308'; 
     case 'NORMAL':
-      return '#22c55e'; // green-500
+      return '#22c55e';
     default:
-      return '#6b7280'; // gray-500
+      return '#6b7280'; 
   }
 }

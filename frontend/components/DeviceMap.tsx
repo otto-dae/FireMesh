@@ -27,7 +27,7 @@ export default function DeviceMap({
   onDeviceClick,
 }: DeviceMapProps) {
   const mapRef = useRef<L.Map | null>(null);
-  const markersRef = useRef<Map<string, L.CircleMarker>>(new Map());
+  const markersRef = useRef<Map<string, L.Marker>>(new Map());
 
   useEffect(() => {
     // Inicializar mapa solo una vez
@@ -63,17 +63,75 @@ export default function DeviceMap({
       const existingMarker = currentMarkers.get(device.deviceId);
 
       if (existingMarker) {
-        // Actualizar color del marcador existente
-        existingMarker.setStyle({ fillColor: color, color: color });
+        // Actualizar icono del marcador existente
+        const iconHtml = `
+          <div style="
+            background-color: ${color};
+            width: 40px;
+            height: 40px;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">
+            <svg 
+              style="transform: rotate(45deg); width: 20px; height: 20px;" 
+              fill="white" 
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 2c-1.1 0-2 .9-2 2 0 .74.4 1.38 1 1.72V9h2V5.72c.6-.34 1-.98 1-1.72 0-1.1-.9-2-2-2zm-1 10v9c0 .55.45 1 1 1s1-.45 1-1v-9h-2zm-7 0c0 .55.45 1 1 1h4v-2H5c-.55 0-1 .45-1 1zm10 0c0 .55.45 1 1 1h4c.55 0 1-.45 1-1s-.45-1-1-1h-4c-.55 0-1 .45-1 1z"/>
+            </svg>
+          </div>
+        `;
+        
+        const customIcon = L.divIcon({
+          html: iconHtml,
+          className: 'custom-marker-icon',
+          iconSize: [40, 40],
+          iconAnchor: [20, 40],
+          popupAnchor: [0, -40],
+        });
+        
+        existingMarker.setIcon(customIcon);
       } else {
-        // Crear nuevo marcador
-        const marker = L.circleMarker([device.latitude, device.longitude], {
-          radius: 12,
-          fillColor: color,
-          color: color,
-          weight: 3,
-          opacity: 1,
-          fillOpacity: 0.8,
+        // Crear icono personalizado con SVG
+        const iconHtml = `
+          <div style="
+            background-color: ${color};
+            width: 40px;
+            height: 40px;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            border: 3px solid white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">
+            <svg 
+              style="transform: rotate(45deg); width: 20px; height: 20px;" 
+              fill="white" 
+              viewBox="0 0 24 24"
+            >
+              <path d="M12 2c-1.1 0-2 .9-2 2 0 .74.4 1.38 1 1.72V9h2V5.72c.6-.34 1-.98 1-1.72 0-1.1-.9-2-2-2zm-1 10v9c0 .55.45 1 1 1s1-.45 1-1v-9h-2zm-7 0c0 .55.45 1 1 1h4v-2H5c-.55 0-1 .45-1 1zm10 0c0 .55.45 1 1 1h4c.55 0 1-.45 1-1s-.45-1-1-1h-4c-.55 0-1 .45-1 1z"/>
+            </svg>
+          </div>
+        `;
+
+        const customIcon = L.divIcon({
+          html: iconHtml,
+          className: 'custom-marker-icon',
+          iconSize: [40, 40],
+          iconAnchor: [20, 40],
+          popupAnchor: [0, -40],
+        });
+
+        // Crear nuevo marcador con icono personalizado
+        const marker = L.marker([device.latitude, device.longitude], {
+          icon: customIcon,
         }).addTo(map);
 
         // Popup con información del dispositivo
@@ -131,7 +189,7 @@ export default function DeviceMap({
         if (bounds.isValid()) {
           map.fitBounds(bounds.pad(0.15));
         }
-      } catch (e) {
+      } catch {
         // No bloquear si hay error al ajustar bounds
       }
     }
