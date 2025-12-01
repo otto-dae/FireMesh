@@ -21,7 +21,7 @@ export const DEFAULT_THRESHOLDS: AlertThresholds = {
  */
 export function calculateAlertLevel(
   data: {
-    temperature: number;
+    temperature?: number;
     smoke: number;
     flame: number;
   },
@@ -31,7 +31,7 @@ export function calculateAlertLevel(
 
   // Verificar niveles críticos
   if (
-    temperature >= thresholds.temperature.critical ||
+    (Number.isFinite(temperature) && temperature! >= thresholds.temperature.critical) ||
     smoke >= thresholds.smoke.critical ||
     flame >= thresholds.flame.critical
   ) {
@@ -40,7 +40,7 @@ export function calculateAlertLevel(
 
   // Verificar niveles de advertencia
   if (
-    temperature >= thresholds.temperature.warning ||
+    (Number.isFinite(temperature) && temperature! >= thresholds.temperature.warning) ||
     smoke >= thresholds.smoke.warning ||
     flame >= thresholds.flame.warning
   ) {
@@ -56,7 +56,7 @@ export function calculateAlertLevel(
 export function generateAlertMessage(
   level: AlertLevel,
   data: {
-    temperature: number;
+    temperature?: number;
     smoke: number;
     flame: number;
   }
@@ -65,7 +65,7 @@ export function generateAlertMessage(
 
   if (level === 'CRITICAL') {
     const reasons = [];
-    if (temperature >= DEFAULT_THRESHOLDS.temperature.critical) {
+    if (Number.isFinite(temperature) && temperature! >= DEFAULT_THRESHOLDS.temperature.critical) {
       reasons.push(`Temperatura crítica: ${temperature}°C`);
     }
     if (smoke >= DEFAULT_THRESHOLDS.smoke.critical) {
@@ -79,7 +79,7 @@ export function generateAlertMessage(
 
   if (level === 'WARNING') {
     const reasons = [];
-    if (temperature >= DEFAULT_THRESHOLDS.temperature.warning) {
+    if (Number.isFinite(temperature) && temperature! >= DEFAULT_THRESHOLDS.temperature.warning) {
       reasons.push(`Temperatura elevada: ${temperature}°C`);
     }
     if (smoke >= DEFAULT_THRESHOLDS.smoke.warning) {
