@@ -16,28 +16,28 @@
 // 1. CONFIGURACIÓN Y DEFINICIONES
 
 // --- ¡CAMBIAR ESTO SEGÚN LA PLACA QUE ESTÉS GRABANDO! ---
-#define IS_ROOT true  // true para ROOT, false para CHILD
+#define IS_ROOT false  // true para ROOT, false para CHILD
 
 // Credenciales de la Malla
 #define MESH_PREFIX     "FireMesh_DX"
 #define MESH_PASSWORD   "ProyectoFinal123"
 #define MESH_PORT       5555
 
-#define WIFI_SSID       "Red de Acha 2.4"
-#define WIFI_PASSWORD   "Vaquillaeselno1!"
+#define WIFI_SSID       "FIF_Innovacion"
+#define WIFI_PASSWORD   "F1f@1Nn0v@"
 
 // Estas son las credenciales de tu Firebase Console
 #define FIREBASE_API_KEY         "AIzaSyD68kCuCDHIfppOnqTvHQuPEx3-0aoBVQY"
-#define FIREBASE_AUTH_DOMAIN     "equipo-naranja-20606.firebaseapp.comv"
-#define FIREBASE_DATABASE_URL    "https://equipo-naranja-20606-default-rtdb.firebaseio.co/"
+#define FIREBASE_AUTH_DOMAIN     "equipo-naranja-20606.firebaseapp.com"
+#define FIREBASE_DATABASE_URL    "https://equipo-naranja-20606-default-rtdb.firebaseio.com/"
 #define FIREBASE_PROJECT_ID      "equipo-naranja-20606"
 #define FIREBASE_STORAGE_BUCKET  "equipo-naranja-20606.firebasestorage.app"
 #define FIREBASE_MESSAGING_SENDER_ID  "973639775100"
 #define FIREBASE_APP_ID          "1:973639775100:web:f2e305094653d66343eaf9"
 
 // Credenciales de Usuario Firebase (Authentication)
-#define FIREBASE_USER_EMAIL     "koto.dump.2420@gmail.com"
-#define FIREBASE_USER_PASSWORD  "AlCh1l3M3V4L3V3rg4"
+#define FIREBASE_USER_EMAIL     "otto.acha.28@gmail.com"
+#define FIREBASE_USER_PASSWORD  ""
 
 // Configuración de Memoria Offline
 #define MAX_BUFFER_SIZE 20
@@ -162,6 +162,7 @@ void setupWiFi() {
 }
 
 void setupFirebase() {
+    Serial.println("\nSoy Linux ESP32");
     Serial.println("\n[Firebase] Configurando...");
     
     // Configuración usando todas las credenciales
