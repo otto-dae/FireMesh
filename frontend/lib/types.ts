@@ -37,7 +37,7 @@ export interface Alert {
 // Tipo para datos en tiempo real desde Firebase
 export interface RealtimeDeviceData {
   deviceId: string;
-  temperature: number;
+  temperature?: number;
   smoke: number;
   flame: number;
   alertLevel: AlertLevel;
@@ -94,7 +94,7 @@ export interface DeviceMapMarker {
   longitude: number;
   alertLevel: AlertLevel;
   lastReading?: {
-    temperature: number;
+    temperature?: number;
     smoke: number;
     flame: number;
     timestamp: Date;

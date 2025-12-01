@@ -160,11 +160,12 @@ function DeviceMap({
 
 // Crear contenido HTML del popup
 function createPopupContent(device: DeviceMapMarker): string {
-  const statusColor = device.isOnline ? '#22c55e' : '#ef4444';
-  const statusText = device.isOnline ? '🟢 Online' : '🔴 Offline';
-  const alertBadgeColor = 
-    device.alertLevel === 'CRITICAL' ? '#ef4444' : 
-    device.alertLevel === 'WARNING' ? '#eab308' : '#22c55e';
+  const statusColor = device.isOnline ? '#22c55e' : '#9ca3af';
+  const statusText = device.isOnline ? '● Online' : '○ Offline';
+  const alertBadgeStyle = 
+    device.alertLevel === 'CRITICAL' ? 'background-color: #ef4444; color: white;' : 
+    device.alertLevel === 'WARNING' ? 'background-color: #3b82f6; color: white;' : 
+    'background-color: #f3f4f6; color: #111827;';
 
   return `
     <div style="font-family: system-ui, -apple-system, sans-serif; min-width: 250px;">
@@ -184,8 +185,7 @@ function createPopupContent(device: DeviceMapMarker): string {
       <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
         <span style="font-size: 14px; font-weight: 600;">Nivel de Alerta:</span>
         <span style="
-          background-color: ${alertBadgeColor};
-          color: white;
+          ${alertBadgeStyle}
           padding: 4px 12px;
           border-radius: 12px;
           font-size: 12px;
@@ -203,7 +203,7 @@ function createPopupContent(device: DeviceMapMarker): string {
           <div style="display: grid; gap: 6px;">
             <div style="display: flex; justify-content: space-between; font-size: 14px;">
               <span>🌡️ Temperatura:</span>
-              <strong>${device.lastReading.temperature.toFixed(1)}°C</strong>
+              <strong>${Number.isFinite(device.lastReading.temperature) ? device.lastReading.temperature!.toFixed(1) + '°C' : 'N/A'}</strong>
             </div>
             <div style="display: flex; justify-content: space-between; font-size: 14px;">
               <span>💨 Humo:</span>
@@ -223,7 +223,7 @@ function createPopupContent(device: DeviceMapMarker): string {
           display: block;
           width: 100%;
           text-align: center;
-          background-color: #3b82f6;
+          background-color: #000000;
           color: white;
           padding: 8px 16px;
           border-radius: 6px;
@@ -232,8 +232,8 @@ function createPopupContent(device: DeviceMapMarker): string {
           font-size: 14px;
           transition: background-color 0.2s;
         "
-        onmouseover="this.style.backgroundColor='#2563eb'"
-        onmouseout="this.style.backgroundColor='#3b82f6'"
+        onmouseover="this.style.backgroundColor='#333333'"
+        onmouseout="this.style.backgroundColor='#000000'"
       >
         Ver Detalles Completos →
       </a>

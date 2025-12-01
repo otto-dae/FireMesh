@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import DeviceList from '@/components/DeviceList';
-import { DeviceMapMarker, RealtimeDeviceData } from '@/lib/types';
+import { DeviceMapMarker } from '@/lib/types';
 import { subscribeToAllDevices, getAllDeviceInfo } from '@/lib/realtime';
 import { AlertCircle, Flame, Activity } from 'lucide-react';
 

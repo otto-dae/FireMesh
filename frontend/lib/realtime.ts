@@ -91,8 +91,8 @@ function convertFirebaseNode(
 
   console.log('📊 Última lectura:', latestLectura);
 
-  // Temperatura simulada (puedes agregar sensor de temperatura real)
-  const temperature = 25 + Math.random() * 5;
+  // No hay sensor de temperatura, usar undefined
+  const temperature = undefined;
   
   const alertLevel = calculateAlertLevel({
     temperature,

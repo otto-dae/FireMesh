@@ -58,7 +58,7 @@ export default function DeviceList({ devices, onDeviceSelect }: DeviceListProps)
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <div className="flex items-center gap-1">
                     <Thermometer className="h-3 w-3 text-orange-500" />
-                    <span>{device.lastReading.temperature.toFixed(1)}°C</span>
+                    <span>{Number.isFinite(device.lastReading.temperature) ? `${device.lastReading.temperature!.toFixed(1)}°C` : 'N/A'}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Wind className="h-3 w-3 text-gray-500" />
