@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -21,7 +21,6 @@ const DeviceMap = dynamic(() => import('@/components/DeviceMap'), {
 
 export default function Dashboard() {
   const [devices, setDevices] = useState<DeviceMapMarker[]>([]);
-  const [realtimeData, setRealtimeData] = useState<Record<string, RealtimeDeviceData>>({});
   const [loading, setLoading] = useState(true);
 
   // Cargar información estática de dispositivos desde Firebase
@@ -43,6 +42,7 @@ export default function Dashboard() {
         
         setDevices(initialDevices);
       } catch (error) {
+        console.error('Error cargando información de dispositivos:', error);
       } finally {
         setLoading(false);
       }
@@ -54,13 +54,28 @@ export default function Dashboard() {
   // Suscribirse a datos en tiempo real (Firebase)
   useEffect(() => {
     const unsubscribe = subscribeToAllDevices((data) => {
-      setRealtimeData(data);
+      console.log('🔄 Actualizando dispositivos con datos en tiempo real');
       
       // Actualizar dispositivos con datos en tiempo real
       setDevices((prevDevices) =>
         prevDevices.map((device) => {
           const rtData = data[device.deviceId];
           if (rtData) {
+            // Verificar si realmente hay cambios para evitar re-renders innecesarios
+            const hasChanges = 
+              device.alertLevel !== rtData.alertLevel ||
+              device.isOnline !== rtData.isOnline ||
+              !device.lastReading ||
+              device.lastReading.temperature !== rtData.temperature ||
+              device.lastReading.smoke !== rtData.smoke ||
+              device.lastReading.flame !== rtData.flame;
+            
+            if (!hasChanges) {
+              console.log('⏭️ Sin cambios para', device.deviceId);
+              return device; // Retornar la misma referencia si no hay cambios
+            }
+            
+            console.log('✅ Actualizando', device.deviceId, 'con nuevos datos');
             return {
               ...device,
               alertLevel: rtData.alertLevel,
@@ -81,9 +96,17 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, []);
 
-  const criticalDevices = devices.filter((d) => d.alertLevel === 'CRITICAL');
-  const warningDevices = devices.filter((d) => d.alertLevel === 'WARNING');
-  const onlineDevices = devices.filter((d) => d.isOnline);
+  // Callback memoizado para evitar re-renders innecesarios
+  const handleDeviceClick = useCallback((deviceId: string) => {
+    window.location.href = `/device/${deviceId}`;
+  }, []);
+
+  // Calcular estadísticas memoizadas
+  const stats = useMemo(() => ({
+    critical: devices.filter((d) => d.alertLevel === 'CRITICAL'),
+    warning: devices.filter((d) => d.alertLevel === 'WARNING'),
+    online: devices.filter((d) => d.isOnline),
+  }), [devices]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -106,11 +129,11 @@ export default function Dashboard() {
                 <div className="text-muted-foreground">Dispositivos</div>
               </div>
               <div className="text-center">
-                <div className="font-bold text-lg text-green-500">{onlineDevices.length}</div>
+                <div className="font-bold text-lg text-green-500">{stats.online.length}</div>
                 <div className="text-muted-foreground">Online</div>
               </div>
               <div className="text-center">
-                <div className="font-bold text-lg text-red-500">{criticalDevices.length}</div>
+                <div className="font-bold text-lg text-red-500">{stats.critical.length}</div>
                 <div className="text-muted-foreground">Alertas</div>
               </div>
             </div>
@@ -119,14 +142,14 @@ export default function Dashboard() {
       </header>
 
       {/* Alertas críticas */}
-      {criticalDevices.length > 0 && (
+      {stats.critical.length > 0 && (
         <div className="container mx-auto px-4 py-4">
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>⚠️ Alerta Crítica</AlertTitle>
             <AlertDescription>
-              {criticalDevices.length} dispositivo(s) en estado crítico:{' '}
-              {criticalDevices.map((d) => d.name).join(', ')}
+              {stats.critical.length} dispositivo(s) en estado crítico:{' '}
+              {stats.critical.map((d) => d.name).join(', ')}
             </AlertDescription>
           </Alert>
         </div>
@@ -152,10 +175,7 @@ export default function Dashboard() {
                 ) : (
                   <DeviceMap
                     devices={devices}
-                    onDeviceClick={(deviceId) => {
-                      // Navegar a página de detalle
-                      window.location.href = `/device/${deviceId}`;
-                    }}
+                    onDeviceClick={handleDeviceClick}
                   />
                 )}
               </CardContent>
@@ -172,9 +192,7 @@ export default function Dashboard() {
               <CardContent className="h-[calc(100%-80px)]">
                 <DeviceList
                   devices={devices}
-                  onDeviceSelect={(deviceId) => {
-                    window.location.href = `/device/${deviceId}`;
-                  }}
+                  onDeviceSelect={handleDeviceClick}
                 />
               </CardContent>
             </Card>

@@ -1,5 +1,3 @@
-// Tipos para datos de sensores ESP32
-
 export type AlertLevel = 'NORMAL' | 'WARNING' | 'CRITICAL';
 
 export interface Device {

@@ -29,6 +29,12 @@ export const NODE_TO_DEVICE_MAP: Record<string, {
   // Agrega aquí tus otros nodos cuando los tengas
 };
 
+// Cache para guardar el timestamp de la última actualización POR DISPOSITIVO
+const lastSeenTimestamps: Record<string, {
+  serverTimestamp: number;  // Timestamp del ESP32
+  clientTimestamp: number;  // Timestamp local cuando lo vimos
+}> = {};
+
 /**
  * Obtener nodeId desde deviceId
  */
@@ -69,17 +75,21 @@ function convertFirebaseNode(
   nodeId: string,
   node: FirebaseNode
 ): RealtimeDeviceData | null {
+  console.log('🔄 Convirtiendo nodo:', nodeId, 'Lecturas:', Object.keys(node.lecturas || {}).length);
   
   const deviceInfo = NODE_TO_DEVICE_MAP[nodeId];
   if (!deviceInfo) {
+    console.warn('⚠️ No se encontró deviceInfo para nodeId:', nodeId);
     return null;
   }
 
   const latestLectura = getLatestLectura(node.lecturas);
   if (!latestLectura) {
+    console.warn('⚠️ No hay lecturas para nodeId:', nodeId);
     return null;
   }
 
+  console.log('📊 Última lectura:', latestLectura);
 
   // Temperatura simulada (puedes agregar sensor de temperatura real)
   const temperature = 25 + Math.random() * 5;
@@ -90,9 +100,51 @@ function convertFirebaseNode(
     flame: latestLectura.fuego,
   });
 
-  // Considerar online si ultima conexión fue hace menos de 30 segundos
+  // ✅ DETECCIÓN CORRECTA DE ESTADO ONLINE
+  const currentServerTimestamp = latestLectura.serverTimestamp;
   const now = Date.now();
-  const isOnline = (now - node.ultimaConexion) < 30000;
+  
+  // Verificar si ya vimos esta lectura antes
+  const lastSeen = lastSeenTimestamps[nodeId];
+  
+  let isOnline = false;
+  let razonamiento = '';
+  
+  if (!lastSeen) {
+    // Primera vez que vemos este dispositivo
+    lastSeenTimestamps[nodeId] = {
+      serverTimestamp: currentServerTimestamp,
+      clientTimestamp: now,
+    };
+    isOnline = true;
+    razonamiento = 'Primera lectura recibida - ONLINE';
+  } else if (currentServerTimestamp > lastSeen.serverTimestamp) {
+    // El serverTimestamp cambió = nueva lectura = dispositivo activo
+    lastSeenTimestamps[nodeId] = {
+      serverTimestamp: currentServerTimestamp,
+      clientTimestamp: now,
+    };
+    isOnline = true;
+    razonamiento = 'Nueva lectura detectada - ONLINE';
+  } else {
+    // El serverTimestamp NO cambió, verificar cuánto tiempo pasó desde la última actualización
+    const tiempoSinActualizar = now - lastSeen.clientTimestamp;
+    const timeoutMs = 60000; // 60 segundos
+    
+    isOnline = tiempoSinActualizar < timeoutMs;
+    razonamiento = isOnline 
+      ? `Sin cambios pero dentro del timeout (${Math.floor(tiempoSinActualizar / 1000)}s) - ONLINE`
+      : `Sin datos nuevos por ${Math.floor(tiempoSinActualizar / 1000)}s - OFFLINE`;
+  }
+
+  console.log('⏰ Estado del dispositivo:', {
+    nodeId,
+    currentServerTimestamp,
+    lastSeenServerTimestamp: lastSeen?.serverTimestamp,
+    tiempoTranscurrido: lastSeen ? `${Math.floor((now - lastSeen.clientTimestamp) / 1000)}s` : 'N/A',
+    isOnline,
+    razonamiento,
+  });
 
   const result = {
     deviceId: deviceInfo.deviceId,
@@ -100,10 +152,11 @@ function convertFirebaseNode(
     smoke: latestLectura.humo,
     flame: latestLectura.fuego,
     alertLevel,
-    timestamp: latestLectura.serverTimestamp || latestLectura.timestamp,
+    timestamp: now, // Timestamp local actual para la UI
     isOnline,
   };
 
+  console.log('✅ Dispositivo convertido:', result);
   return result;
 }
 
@@ -156,29 +209,33 @@ export function subscribeToAllDevices(
   const sensoresRef = ref(database, 'sensores');
 
   onValue(sensoresRef, (snapshot: DataSnapshot) => {
+    console.log('📨 Snapshot recibido. Existe:', snapshot.exists());
     
     if (snapshot.exists()) {
       const sensores = snapshot.val() as Record<string, FirebaseNode>;
+      console.log('📦 Nodos encontrados:', Object.keys(sensores));
       const devicesData: Record<string, RealtimeDeviceData> = {};
 
       Object.entries(sensores).forEach(([nodeId, nodeData]) => {
+        console.log(`🔄 Procesando nodo: ${nodeId}`);
         const deviceData = convertFirebaseNode(nodeId, nodeData);
         if (deviceData) {
           devicesData[deviceData.deviceId] = deviceData;
         }
       });
 
+      console.log('🔥 Datos actualizados en firebase', devicesData);
       callback(devicesData);
     } else {
-      console.error('No existen datos en sensores');
+      console.error('❌ No existen datos en /sensores');
       callback({});
     }
   }, (error) => {
-    console.error('Error en subscribeToAllDevices:', error);
+    console.error('❌ Error en subscribeToAllDevices:', error);
   });
 
   return () => {
-    console.log('Desuscribiendo de todos los sensores');
+    console.log('🔕 Desuscribiendo de todos los sensores');
     off(sensoresRef);
   };
 }
@@ -190,33 +247,37 @@ export function subscribeToDeviceReadings(
   deviceId: string,
   callback: (readings: FirebaseLectura[]) => void
 ): () => void {
+  console.log('🔔 subscribeToDeviceReadings para:', deviceId);
   
   const nodeId = getNodeIdFromDeviceId(deviceId);
   if (!nodeId) {
-    console.error('No se encontró nodeId para deviceId:', deviceId);
+    console.error('❌ No se encontró nodeId para deviceId:', deviceId);
     callback([]);
     return () => {};
   }
 
   const lecturasRef = ref(database, `sensores/${nodeId}/lecturas`);
+  console.log('📡 Suscribiendo a lecturas en:', `sensores/${nodeId}/lecturas`);
 
   onValue(lecturasRef, (snapshot: DataSnapshot) => {
+    console.log('📨 Lecturas recibidas. Existe:', snapshot.exists());
     
     if (snapshot.exists()) {
       const lecturasObj = snapshot.val() as Record<string, FirebaseLectura>;
       const lecturasArray = Object.values(lecturasObj)
         .sort((a, b) => b.serverTimestamp - a.serverTimestamp);
-      console.log('Lecturas procesadas:', lecturasArray.length);
+      console.log('✅ Lecturas procesadas:', lecturasArray.length);
       callback(lecturasArray);
     } else {
-      console.warn('No hay lecturas para:', deviceId);
+      console.warn('⚠️ No hay lecturas para:', deviceId);
       callback([]);
     }
   }, (error) => {
-    console.error('Error en subscribeToDeviceReadings:', error);
+    console.error('❌ Error en subscribeToDeviceReadings:', error);
   });
 
   return () => {
+    console.log('🔕 Desuscribiendo de lecturas:', deviceId);
     off(lecturasRef);
   };
 }
