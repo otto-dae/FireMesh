@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -26,17 +26,13 @@ export default function DeviceDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [readings, setReadings] = useState<FirebaseLectura[]>([]);
-  const [deviceInfo, setDeviceInfo] = useState<ReturnType<typeof getDeviceInfoByDeviceId>>(null);
   const [loading, setLoading] = useState(true);
+  
+  const deviceId = params.id as string;
+  const deviceInfo = useMemo(() => getDeviceInfoByDeviceId(deviceId), [deviceId]);
 
   useEffect(() => {
-    const deviceId = params.id as string;
-    
-    // Obtener información del dispositivo
-    const info = getDeviceInfoByDeviceId(deviceId);
-    setDeviceInfo(info);
-
-    if (!info) {
+    if (!deviceInfo) {
       setLoading(false);
       return;
     }
@@ -49,7 +45,7 @@ export default function DeviceDetailPage() {
     });
 
     return () => unsubscribe();
-  }, [params.id]);
+  }, [deviceId, deviceInfo]);
 
   if (loading) {
     return (
@@ -70,11 +66,8 @@ export default function DeviceDetailPage() {
 
   const latestReading = readings[0];
   
-  // Temperatura simulada (puedes agregar sensor real)
-  const temperature = latestReading ? 25 + Math.random() * 5 : 0;
-  
   const alertLevel = latestReading ? calculateAlertLevel({
-    temperature,
+    temperature: undefined,
     smoke: latestReading.humo,
     flame: latestReading.fuego,
   }) : 'NORMAL';
@@ -83,8 +76,7 @@ export default function DeviceDetailPage() {
     .slice(0, 50)
     .reverse()
     .map((reading) => ({
-      time: format(new Date(reading.serverTimestamp), 'HH:mm:ss'),
-      temperature: 25 + Math.random() * 5,
+      time: format(new Date(reading.timestamp || reading.serverTimestamp), 'HH:mm:ss'),
       smoke: reading.humo,
       flame: reading.fuego,
     }));
@@ -124,7 +116,7 @@ export default function DeviceDetailPage() {
                 <Thermometer className="h-4 w-4 text-orange-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{temperature.toFixed(1)}°C</div>
+                <div className="text-2xl font-bold">N/A</div>
                 <p className="text-xs text-muted-foreground">
                   <Clock className="inline h-3 w-3 mr-1" />
                   {format(new Date(latestReading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
@@ -143,7 +135,7 @@ export default function DeviceDetailPage() {
                 <div className="text-2xl font-bold">{latestReading.humo.toFixed(0)} ppm</div>
                 <p className="text-xs text-muted-foreground">
                   <Clock className="inline h-3 w-3 mr-1" />
-                  {format(new Date(latestReading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
+                  {format(new Date(latestReading.timestamp || latestReading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
                     locale: es,
                   })}
                 </p>
@@ -159,7 +151,7 @@ export default function DeviceDetailPage() {
                 <div className="text-2xl font-bold">{latestReading.fuego}</div>
                 <p className="text-xs text-muted-foreground">
                   <Clock className="inline h-3 w-3 mr-1" />
-                  {format(new Date(latestReading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
+                  {format(new Date(latestReading.timestamp || latestReading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
                     locale: es,
                   })}
                 </p>
@@ -186,26 +178,16 @@ export default function DeviceDetailPage() {
                   <LineChart data={chartData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="time" />
-                    <YAxis yAxisId="left" />
-                    <YAxis yAxisId="right" orientation="right" />
+                    <YAxis />
                     <Tooltip />
                     <Legend />
                     <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="temperature"
-                      stroke="#f97316"
-                      name="Temperatura (°C)"
-                    />
-                    <Line
-                      yAxisId="right"
                       type="monotone"
                       dataKey="smoke"
                       stroke="#6b7280"
                       name="Humo (ppm)"
                     />
                     <Line
-                      yAxisId="right"
                       type="monotone"
                       dataKey="flame"
                       stroke="#ef4444"
@@ -236,20 +218,19 @@ export default function DeviceDetailPage() {
                   </TableHeader>
                   <TableBody>
                     {readings.slice(0, 20).map((reading, index) => {
-                      const temp = 25 + Math.random() * 5;
                       const alert = calculateAlertLevel({
-                        temperature: temp,
+                        temperature: undefined,
                         smoke: reading.humo,
                         flame: reading.fuego,
                       });
                       return (
                         <TableRow key={index}>
                           <TableCell>
-                            {format(new Date(reading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
+                            {format(new Date(reading.timestamp || reading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
                               locale: es,
                             })}
                           </TableCell>
-                          <TableCell>{temp.toFixed(1)}°C</TableCell>
+                          <TableCell>N/A</TableCell>
                           <TableCell>{reading.humo.toFixed(0)} ppm</TableCell>
                           <TableCell>{reading.fuego}</TableCell>
                           <TableCell>
