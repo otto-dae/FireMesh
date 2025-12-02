@@ -16,15 +16,15 @@
 // 1. CONFIGURACIÓN Y DEFINICIONES
 
 // --- ¡CAMBIAR ESTO SEGÚN LA PLACA QUE ESTÉS GRABANDO! ---
-#define IS_ROOT false  // true para ROOT, false para CHILD
+#define IS_ROOT true  // true para ROOT, false para CHILD
 
 // Credenciales de la Malla
-#define MESH_PREFIX     "FireMesh_DX"
-#define MESH_PASSWORD   "ProyectoFinal123"
+#define MESH_PREFIX     "videoetica"
+#define MESH_PASSWORD   "12345678"
 #define MESH_PORT       5555
 
-#define WIFI_SSID       "FIF_Innovacion"
-#define WIFI_PASSWORD   "F1f@1Nn0v@"
+#define WIFI_SSID       "LabPercepcion_Guest"
+#define WIFI_PASSWORD   ""
 
 // Estas son las credenciales de tu Firebase Console
 #define FIREBASE_API_KEY         "AIzaSyD68kCuCDHIfppOnqTvHQuPEx3-0aoBVQY"
@@ -145,7 +145,7 @@ void checkAndFlushBuffer() {
 
 void setupWiFi() {
     Serial.printf("\n[WiFi] Conectando a %s...\n", WIFI_SSID);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD, 9);
     
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
@@ -162,7 +162,6 @@ void setupWiFi() {
 }
 
 void setupFirebase() {
-    Serial.println("\nSoy Linux ESP32");
     Serial.println("\n[Firebase] Configurando...");
     
     // Configuración usando todas las credenciales
