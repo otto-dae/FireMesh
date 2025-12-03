@@ -1,5 +1,8 @@
+// src/root.cpp
+// ROOT NODE - Nodo raíz con WiFi y Firebase
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include "credentials.hpp"
 #include "WiFiManager.hpp"
 #include "FirebaseManager.hpp"

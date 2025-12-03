@@ -1,9 +1,8 @@
 #ifndef FIREBASE_MANAGER_H
 #define FIREBASE_MANAGER_H
 
+#include <Arduino.h>
 #include <Firebase_ESP_Client.h>
-#include "addons/TokenHelper.h"
-#include "addons/RTDBHelper.h"
 
 class FirebaseManager {
 private:
@@ -14,6 +13,8 @@ private:
 
 public:
     FirebaseManager();
+    ~FirebaseManager();
+
     bool begin(const char* apiKey, const char* dbURL, const char* email, const char* password);
     bool isReady();
     bool sendData(int humo, int fuego, unsigned long long ts, String tipo, uint32_t nodeId);

@@ -1,4 +1,4 @@
-#include "WifiManager.hpp"
+#include "WiFiManager.hpp"
 
 WiFiManager::WiFiManager(const char* ssid, const char* password, int maxAttempts) 
     : ssid(ssid), password(password), maxAttempts(maxAttempts) {}
