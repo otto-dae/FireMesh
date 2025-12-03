@@ -13,36 +13,32 @@ painlessMesh mesh;
 WiFiManager wifiManager(WIFI_SSID, WIFI_PASSWORD);
 FirebaseManager firebaseManager;
 SyncManager syncManager(&mesh);
+
 const String DEVICE_ID = "ROOT";
 
-
-// Callbacks
+// Prototipos
 void receivedCallback(uint32_t from, String &msg);
 void newConnectionCallback(uint32_t nodeId);
 
-// Tarea periódica para anunciar ROOT
+// Tarea periódica para anunciar ROOT por broadcast
 Task taskAnnounceRoot(5000, TASK_FOREVER, []() {
   StaticJsonDocument<128> doc;
-  doc["type"] = "ROOT_ANNOUNCE";
+  doc["type"] = "SYNC";
   doc["root"] = mesh.getNodeId();
 
   String msg;
   serializeJson(doc, msg);
-
   mesh.sendBroadcast(msg);
-  Serial.println("[ROOT] Enviando ROOT_ANNOUNCE (broadcast)");
+
+  Serial.println("[ROOT] Broadcast SYNC enviado");
 });
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
+  delay(300);
+  Serial.println("\nROOT NODE CON FIREBASE INICIANDO\n");
 
-  while(Serial.available()) Serial.read();
-  Serial.println();
-  Serial.flush();
-  
-  Serial.println("ROOT NODE CON FIREBASE INICIANDO");
-  
+  // Conectar WiFi antes de Firebase
   if (wifiManager.connect()) {
     firebaseManager.begin(
       FIREBASE_API_KEY,
@@ -51,9 +47,10 @@ void setup() {
       FIREBASE_USER_PASSWORD
     );
   } else {
-    Serial.println("\n[ERROR] Sin WiFi. Firebase deshabilitado.");
+    Serial.println("[ERROR] No hay WiFi. Firebase deshabilitado");
   }
-  
+
+  // Inicializar Mesh
   mesh.setDebugMsgTypes(ERROR | STARTUP);
   mesh.init(MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT);
   mesh.onReceive(&receivedCallback);
@@ -62,28 +59,40 @@ void setup() {
   mesh.stationManual(WIFI_SSID, WIFI_PASSWORD);
   mesh.setHostname("FireMesh_Root");
 
-  //  anuncio periódico del ROOT
+  // Activar anuncio periódico del ROOT
   userScheduler.addTask(taskAnnounceRoot);
   taskAnnounceRoot.enable();
-
-  Serial.println("\n[ROOT] Sistema iniciado completamente\n");
+  
+  Serial.println("[ROOT] Sistema iniciado correctamente\n");
 }
 
 void loop() {
   mesh.update();
 }
 
+//
+// Procesar mensajes desde los CHILD
+//
 void receivedCallback(uint32_t from, String &msg) {
   StaticJsonDocument<300> doc;
-  if (deserializeJson(doc, msg)) return;
+  if (deserializeJson(doc, msg)) {
+    Serial.println("[ROOT] Error parseando JSON");
+    return;
+  }
 
   String type = doc["type"];
 
+  //
+  // RESPUESTA A PEDIDO DE SYNC (TIME REQUEST)
+  //
   if (type == "TIME") {
     syncManager.handleSyncRequest(from);
     return;
   }
 
+  //
+  // RECEPCIÓN DE DATA (sensores)
+  //
   if (type.startsWith("DATA")) {
     if (doc["body"].isNull()) return;
 
@@ -92,23 +101,27 @@ void receivedCallback(uint32_t from, String &msg) {
     unsigned long long ts = doc["body"]["ts"];
     uint32_t srcNode = doc["src"];
 
-    Serial.printf("[ROOT] Recibido %s - humo: %d, fuego: %d, ts: %llu (nodo %u)\n", 
-                  type.c_str(), humo, fuego, ts, srcNode);
+    Serial.printf(
+      "[ROOT] DATA recibida - humo: %d | fuego: %d | ts: %llu | nodo: %u\n",
+      humo, fuego, ts, srcNode
+    );
 
     firebaseManager.sendData(humo, fuego, ts, type, srcNode);
   }
 }
 
+//
+// Cuando un CHILD se conecta, el ROOT le envía SYNC directo
+//
 void newConnectionCallback(uint32_t nodeId) {
-  Serial.printf("Conexión establecida: %u\n", nodeId);
+  Serial.printf("[ROOT] Nuevo nodo: %u -> enviando SYNC directo\n", nodeId);
 
-  StaticJsonDocument<128> syncMsg;
-  syncMsg["type"] = "SYNC";
-  syncMsg["src"] = mesh.getNodeId();
+  StaticJsonDocument<128> doc;
+  doc["type"] = "SYNC";
+  doc["root"] = mesh.getNodeId();
 
   String msg;
-  serializeJson(syncMsg, msg);
+  serializeJson(doc, msg);
 
   mesh.sendSingle(nodeId, msg);
-  Serial.printf("[ROOT] Enviando SYNC a nodo %u\n", nodeId);
 }

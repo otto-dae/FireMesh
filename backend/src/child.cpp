@@ -1,4 +1,3 @@
-
 #include <Arduino.h>
 #include "credentials.hpp"
 #include "SyncManager.hpp"
@@ -8,7 +7,7 @@ Scheduler userScheduler;
 painlessMesh mesh;
 SyncManager syncManager(&mesh);
 
-// Prototipos de funciones
+// Prototipos
 void sendSyncRequest();
 void generateSensorData();
 void sendDataToRoot(DataPacket reading, String tipo);
@@ -23,135 +22,141 @@ void newConnectionCallback(uint32_t nodeId);
 
 void setup() {
   Serial.begin(115200);
-  delay(1000);
-  
-  // Limpiar buffer serial
-  while(Serial.available()) Serial.read();
-  Serial.println();
-  Serial.flush();
-  
-  Serial.println("CHILD NODE INICIANDO");
-  
-  // Inicializar Mesh
+  delay(300);
+
+  Serial.println("CHILD NODE INICIANDO\n");
+
   mesh.setDebugMsgTypes(ERROR | STARTUP);
   mesh.init(MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT);
   mesh.onReceive(&receivedCallback);
   mesh.onNewConnection(&newConnectionCallback);
-  
-  // Activar tareas periódicas
+
   userScheduler.addTask(taskSync);
   taskSync.enable();
+
   userScheduler.addTask(taskSensor);
   taskSensor.enable();
 
   pinMode(27, INPUT);
   pinMode(35, INPUT);
 
-  
-  Serial.println("[CHILD] Esperando conexión con ROOT...\n");
+  Serial.println("[CHILD] Esperando ROOT...");
 }
 
 void loop() {
   mesh.update();
 }
 
-// TAREA: Solicitar sincronización periódica
+//
+// TASK: Enviar petición de sincronización cada 10s
+//
 void sendSyncRequest() {
-  if (syncManager.getRootId() != 0 && mesh.isConnected(syncManager.getRootId())) {
-    StaticJsonDocument<128> syncReq;
-    syncReq["type"] = "TIME";
-    syncReq["src"] = mesh.getNodeId();
-    
-    String syncMsg;
-    serializeJson(syncReq, syncMsg);
-    mesh.sendSingle(syncManager.getRootId(), syncMsg);
+  uint32_t root = syncManager.getRootId();
+
+  if (root != 0 && mesh.isConnected(root)) {
+    StaticJsonDocument<128> doc;
+    doc["type"] = "TIME";
+    doc["src"] = mesh.getNodeId();
+
+    String msg;
+    serializeJson(doc, msg);
+    mesh.sendSingle(root, msg);
+
+    Serial.printf("[SYNC] Solicitud TIME enviada a %u\n", root);
   }
 }
 
-// TAREA: Generar datos de sensores
+//
+// TASK: Generar lectura y enviarla al ROOT
+//
 void generateSensorData() {
   DataPacket lectura;
-  
-  // Timestamp sincronizado
-  if (syncManager.getSyncStatus()) {
-    lectura.timestamp = syncManager.getNetworkTime();
-  } else {
-    lectura.timestamp = 0; // Marca inválida
-  }
-  
-  // Simular sensores (adaptar a pines reales)
-  lectura.humo = analogRead(35);
+
+  // timestamp sincronizado
+  lectura.timestamp = syncManager.getSyncStatus() ? 
+                      syncManager.getNetworkTime() : 0;
+
+  lectura.humo  = analogRead(35);
   lectura.fuego = digitalRead(27);
-  
-  // Enviar o guardar en buffer
-  bool networkOK = (syncManager.getRootId() != 0 && 
-                    mesh.isConnected(syncManager.getRootId()));
-  
-  if (!networkOK) {
-    Serial.println("[OFFLINE] Sin red. Guardando en buffer FIFO.");
+
+  uint32_t root = syncManager.getRootId();
+  bool online = (root != 0 && mesh.isConnected(root));
+
+  if (!online) {
+    Serial.println("[OFFLINE] Sin ROOT, guardando en buffer.");
     syncManager.addToBuffer(lectura);
-  } else {
-    // Enviar datos
-    sendDataToRoot(lectura, "DATA");
-    
-    // Intentar vaciar buffer si hay datos pendientes
-    if (syncManager.hasBufferedData()) {
-      syncManager.flushBuffer(sendDataToRoot);
-    }
+    return;
+  }
+
+  // enviar
+  sendDataToRoot(lectura, "DATA");
+
+  // vaciar buffer si aplica
+  if (syncManager.hasBufferedData()) {
+    syncManager.flushBuffer(sendDataToRoot);
   }
 }
 
-// Función auxiliar: Enviar datos al root
+//
+// Enviar lectura al ROOT
+//
 void sendDataToRoot(DataPacket reading, String tipo) {
   String jsonMsg = syncManager.createDataJSON(reading, tipo, mesh.getNodeId());
   mesh.sendSingle(syncManager.getRootId(), jsonMsg);
-  Serial.printf("[ONLINE] Enviando %s - humo: %d, fuego: %d (TS: %llu)\n", 
+
+  Serial.printf("[ONLINE] Enviando %s | humo=%d, fuego=%d | ts=%llu\n",
                 tipo.c_str(), reading.humo, reading.fuego, reading.timestamp);
 }
 
-// CALLBACK: Mensajes recibidos
+//
+// Recibir mensajes MESH
+//
 void receivedCallback(uint32_t from, String &msg) {
   StaticJsonDocument<300> doc;
-  DeserializationError error = deserializeJson(doc, msg);
-  
-  if (error) {
-    Serial.println("[Child] Error JSON recibido");
+  if (deserializeJson(doc, msg)) {
+    Serial.println("[Child] Error parseando JSON");
     return;
   }
-  
+
   String type = doc["type"];
-  
-  // Detección del root (protocolo punto 3)
+
+  // ROOT discovery (SYNC broadcast o directo)
   if (type == "SYNC") {
-    syncManager.setRootId(from);
-    Serial.printf("[CHILD] Root detectado: %u. Iniciando sincronización...\n", from);
-    
-    // Solicitar sincronización inmediata
-    StaticJsonDocument<128> syncReq;
-    syncReq["type"] = "TIME";
-    syncReq["src"] = mesh.getNodeId();
-    
-    String syncMsg;
-    serializeJson(syncReq, syncMsg);
-    mesh.sendSingle(from, syncMsg);
+    uint32_t root = doc["root"]; // siempre viene aquí
+    syncManager.setRootId(root);
+
+    Serial.printf("[CHILD] ROOT detectado: %u\n", root);
+
+    // Solicitamos TIME inmediatamente
+    StaticJsonDocument<128> req;
+    req["type"] = "TIME";
+    req["src"] = mesh.getNodeId();
+
+    String out;
+    serializeJson(req, out);
+    mesh.sendSingle(root, out);
+
     return;
   }
-  
-  // Respuesta de sincronización
+
+  // respuesta TIME del ROOT
   if (type == "TIME") {
     syncManager.handleSyncResponse(doc);
     return;
   }
 }
 
-// CALLBACK: Nueva conexión
+//
+// Evento: nuevo vecino
+//
 void newConnectionCallback(uint32_t nodeId) {
-  Serial.printf(" Conexión establecida: %u\n", nodeId);
-  
-  // Intentar vaciar buffer si hay datos pendientes
-  if (syncManager.hasBufferedData() && 
-      syncManager.getRootId() != 0 && 
-      mesh.isConnected(syncManager.getRootId())) {
+  Serial.printf("[CHILD] Nueva conexión: %u\n", nodeId);
+
+  // intentar enviar el buffer pendiente si el root regresó
+  if (syncManager.getRootId() != 0 &&
+      mesh.isConnected(syncManager.getRootId()) &&
+      syncManager.hasBufferedData()) {
+
     syncManager.flushBuffer(sendDataToRoot);
   }
 }
