@@ -86,16 +86,20 @@ void SyncManager::handleSyncRequest(uint32_t from) {
     StaticJsonDocument<256> res;
     res["type"] = "TIME";
     res["src"] = mesh->getNodeId();
-    
+
     JsonObject body = res.createNestedObject("body");
     body["T2"] = (unsigned long long)millis();
     body["T3"] = (unsigned long long)millis();
-    
+
     String resMsg;
     serializeJson(res, resMsg);
+
+    // painlessMesh hace routing automático multi-hop
     mesh->sendSingle(from, resMsg);
-    Serial.printf("[Sync] Enviando tiempos T2 y T3 a nodo %u\n", from);
+
+    Serial.printf("[Sync] Enviando T2,T3 hacia nodo %u (auto-multihop)\n", from);
 }
+
 
 void SyncManager::handleSyncResponse(JsonDocument& doc) {
     if (doc["body"].isNull()) {

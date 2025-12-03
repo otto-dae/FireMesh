@@ -43,6 +43,10 @@ void setup() {
   taskSync.enable();
   userScheduler.addTask(taskSensor);
   taskSensor.enable();
+
+  pinMode(27, INPUT);
+  pinMode(35, INPUT);
+
   
   Serial.println("[CHILD] Esperando conexión con ROOT...\n");
 }
@@ -76,8 +80,8 @@ void generateSensorData() {
   }
   
   // Simular sensores (adaptar a pines reales)
-  lectura.humo = random(300, 900);
-  lectura.fuego = random(0, 2);
+  lectura.humo = analogRead(35);
+  lectura.fuego = digitalRead(27);
   
   // Enviar o guardar en buffer
   bool networkOK = (syncManager.getRootId() != 0 && 
