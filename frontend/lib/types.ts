@@ -47,17 +47,17 @@ export interface RealtimeDeviceData {
 
 // Estructura real de Firebase para lecturas
 export interface FirebaseLectura {
-  fuego: number;
-  humo: number;
-  nodeId: number;
-  serverTimestamp: number;
-  timestamp: number;
+  body: {
+    fuego: boolean;
+    humo: number;
+    ts: number;
+  };
+  src: number;
   type: string;
 }
 
 export interface FirebaseNode {
   lecturas: Record<string, FirebaseLectura>;
-  ultimaConexion: number;
 }
 
 // Tipo para datos que llegan desde MQTT (ESP32)
