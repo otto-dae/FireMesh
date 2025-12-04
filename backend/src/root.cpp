@@ -1,5 +1,4 @@
-// ROOT NODE - Nodo raíz con WiFi y Firebase
-
+// src/root.cpp - ROOT NODE FINAL
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include "credentials.hpp"
@@ -7,38 +6,29 @@
 #include "FirebaseManager.hpp"
 #include "SyncManager.hpp"
 
-// Instancias globales
+// ========== INSTANCIAS GLOBALES ==========
 Scheduler userScheduler;
 painlessMesh mesh;
 WiFiManager wifiManager(WIFI_SSID, WIFI_PASSWORD);
 FirebaseManager firebaseManager;
 SyncManager syncManager(&mesh);
 
-const String DEVICE_ID = "ROOT";
-
-// Prototipos
+// ========== PROTOTIPOS ==========
 void receivedCallback(uint32_t from, String &msg);
 void newConnectionCallback(uint32_t nodeId);
+void changedConnectionCallback();
+void announceRoot();
 
-// Tarea periódica para anunciar ROOT por broadcast
-Task taskAnnounceRoot(5000, TASK_FOREVER, []() {
-  StaticJsonDocument<128> doc;
-  doc["type"] = "SYNC";
-  doc["root"] = mesh.getNodeId();
+// ========== TAREAS ==========
+Task taskAnnounceRoot(10000, TASK_FOREVER, &announceRoot);
 
-  String msg;
-  serializeJson(doc, msg);
-  mesh.sendBroadcast(msg);
-
-  Serial.println("[ROOT] Broadcast SYNC enviado");
-});
-
+// ========== SETUP ==========
 void setup() {
   Serial.begin(115200);
   delay(300);
-  Serial.println("\nROOT NODE CON FIREBASE INICIANDO\n");
+  Serial.println("ROOT NODE CON FIREBASE INICIANDO");
 
-  // Conectar WiFi antes de Firebase
+  // 1. WiFi + Firebase
   if (wifiManager.connect()) {
     firebaseManager.begin(
       FIREBASE_API_KEY,
@@ -47,32 +37,46 @@ void setup() {
       FIREBASE_USER_PASSWORD
     );
   } else {
-    Serial.println("[ERROR] No hay WiFi. Firebase deshabilitado");
+    Serial.println("[ERROR] Sin WiFi. Firebase deshabilitado.");
   }
 
-  // Inicializar Mesh
-  mesh.setDebugMsgTypes(ERROR | STARTUP);
+  // 2. Mesh
+  mesh.setDebugMsgTypes(ERROR | STARTUP | CONNECTION);
   mesh.init(MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT);
   mesh.onReceive(&receivedCallback);
   mesh.onNewConnection(&newConnectionCallback);
-
+  mesh.onChangedConnections(&changedConnectionCallback);
   mesh.stationManual(WIFI_SSID, WIFI_PASSWORD);
   mesh.setHostname("FireMesh_Root");
 
-  // Activar anuncio periódico del ROOT
+  // 3. Activar broadcast periódico
   userScheduler.addTask(taskAnnounceRoot);
   taskAnnounceRoot.enable();
-  
-  Serial.println("[ROOT] Sistema iniciado correctamente\n");
+
+  Serial.println("[ROOT] Sistema iniciado - Broadcast activo cada 10s\n");
 }
 
+// ========== LOOP ==========
 void loop() {
   mesh.update();
 }
 
-//
-// Procesar mensajes desde los CHILD
-//
+// ========== BROADCAST: Anunciar ROOT cada 10s ==========
+void announceRoot() {
+  StaticJsonDocument<128> doc;
+  doc["type"] = "SYNC";
+  doc["root"] = mesh.getNodeId();
+
+  String msg;
+  serializeJson(doc, msg);
+  mesh.sendBroadcast(msg);
+
+  auto nodes = mesh.getNodeList();
+  Serial.printf("[ROOT] Broadcast SYNC (ID: %u | %d childs visibles)\n", 
+                mesh.getNodeId(), nodes.size());
+}
+
+// ========== CALLBACK: Mensajes recibidos ==========
 void receivedCallback(uint32_t from, String &msg) {
   StaticJsonDocument<300> doc;
   if (deserializeJson(doc, msg)) {
@@ -82,46 +86,47 @@ void receivedCallback(uint32_t from, String &msg) {
 
   String type = doc["type"];
 
-  //
-  // RESPUESTA A PEDIDO DE SYNC (TIME REQUEST)
-  //
+  // Respuesta a solicitud de sincronización NTP
   if (type == "TIME") {
     syncManager.handleSyncRequest(from);
     return;
   }
 
-  //
-  // RECEPCIÓN DE DATA (sensores)
-  //
+  // Recepción de datos de sensores
   if (type.startsWith("DATA")) {
-    if (doc["body"].isNull()) return;
+    if (doc["body"].isNull()) {
+      Serial.println("[ROOT] Body ausente en DATA");
+      return;
+    }
 
     int humo = doc["body"]["humo"];
     int fuego = doc["body"]["fuego"];
     unsigned long long ts = doc["body"]["ts"];
     uint32_t srcNode = doc["src"];
 
-    Serial.printf(
-      "[ROOT] DATA recibida - humo: %d | fuego: %d | ts: %llu | nodo: %u\n",
-      humo, fuego, ts, srcNode
-    );
+    Serial.printf("[ROOT] DATA de nodo %u | humo=%d, fuego=%d, ts=%llu\n",
+                  srcNode, humo, fuego, ts);
 
     firebaseManager.sendData(humo, fuego, ts, type, srcNode);
   }
 }
 
-//
-// Cuando un CHILD se conecta, el ROOT le envía SYNC directo
-//
+// ========== CALLBACK: Nueva conexión directa ==========
 void newConnectionCallback(uint32_t nodeId) {
-  Serial.printf("[ROOT] Nuevo nodo: %u -> enviando SYNC directo\n", nodeId);
+  Serial.printf("[ROOT] Nueva conexión directa: %u\n", nodeId);
 
+  // Enviar SYNC inmediato al nuevo nodo
   StaticJsonDocument<128> doc;
   doc["type"] = "SYNC";
   doc["root"] = mesh.getNodeId();
 
   String msg;
   serializeJson(doc, msg);
-
   mesh.sendSingle(nodeId, msg);
+}
+
+//CALLBACK
+void changedConnectionCallback() {
+  auto nodes = mesh.getNodeList();
+  Serial.printf("[ROOT] Topología cambió (%d nodos ahora)\n", nodes.size());
 }

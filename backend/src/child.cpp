@@ -1,59 +1,79 @@
+// src/child.cpp - CHILD NODE FINAL
 #include <Arduino.h>
 #include "credentials.hpp"
 #include "SyncManager.hpp"
 
-// Instancias globales
+// ========== INSTANCIAS GLOBALES ==========
 Scheduler userScheduler;
 painlessMesh mesh;
 SyncManager syncManager(&mesh);
 
-// Prototipos
+// ========== PROTOTIPOS ==========
 void sendSyncRequest();
 void generateSensorData();
+void checkRootConnection();
 void sendDataToRoot(DataPacket reading, String tipo);
-
-// Tareas periódicas
-Task taskSync(10000, TASK_FOREVER, &sendSyncRequest);       // Sync cada 10s
-Task taskSensor(5000, TASK_FOREVER, &generateSensorData);   // Sensores cada 5s
+bool isNodeReachable(uint32_t nodeId);
 
 // Callbacks
 void receivedCallback(uint32_t from, String &msg);
 void newConnectionCallback(uint32_t nodeId);
+void changedConnectionCallback();
 
+// ========== TAREAS ==========
+Task taskSync(10000, TASK_FOREVER, &sendSyncRequest);
+Task taskSensor(5000, TASK_FOREVER, &generateSensorData);
+Task taskCheckRoot(15000, TASK_FOREVER, &checkRootConnection);
+
+// ========== SETUP ==========
 void setup() {
   Serial.begin(115200);
   delay(300);
+  Serial.println("CHILD NODE INICIANDO");
 
-  Serial.println("CHILD NODE INICIANDO\n");
+  // Configurar pines
+  pinMode(27, INPUT);
+  pinMode(35, INPUT);
 
-  mesh.setDebugMsgTypes(ERROR | STARTUP);
+  // Mesh
+  mesh.setDebugMsgTypes(ERROR | STARTUP | CONNECTION);
   mesh.init(MESH_PREFIX, MESH_PASSWORD, &userScheduler, MESH_PORT);
   mesh.onReceive(&receivedCallback);
   mesh.onNewConnection(&newConnectionCallback);
+  mesh.onChangedConnections(&changedConnectionCallback);
 
+  // Activar tareas
   userScheduler.addTask(taskSync);
   taskSync.enable();
 
   userScheduler.addTask(taskSensor);
   taskSensor.enable();
 
-  pinMode(27, INPUT);
-  pinMode(35, INPUT);
+  userScheduler.addTask(taskCheckRoot);
+  taskCheckRoot.enable();
 
-  Serial.println("[CHILD] Esperando ROOT...");
+  Serial.println("[CHILD] Esperando ROOT...\n");
 }
 
+// ========== LOOP ==========
 void loop() {
   mesh.update();
 }
 
-//
-// TASK: Enviar petición de sincronización cada 10s
-//
+// ========== HELPER: Verificar si un nodo es alcanzable ==========
+bool isNodeReachable(uint32_t nodeId) {
+  auto nodes = mesh.getNodeList();
+  for (auto &id : nodes) {
+    if (id == nodeId) return true;
+  }
+  return false;
+}
+
+// ========== TAREA: Solicitar sincronización NTP ==========
 void sendSyncRequest() {
   uint32_t root = syncManager.getRootId();
 
-  if (root != 0 && mesh.isConnected(root)) {
+  if (root != 0 && isNodeReachable(root)) {
     StaticJsonDocument<128> doc;
     doc["type"] = "TIME";
     doc["src"] = mesh.getNodeId();
@@ -62,17 +82,16 @@ void sendSyncRequest() {
     serializeJson(doc, msg);
     mesh.sendSingle(root, msg);
 
-    Serial.printf("[SYNC] Solicitud TIME enviada a %u\n", root);
+    Serial.printf("[SYNC] TIME request → ROOT %u\n", root);
+  } else {
+    Serial.println("[SYNC] ROOT no alcanzable, esperando broadcast...");
   }
 }
 
-//
-// TASK: Generar lectura y enviarla al ROOT
-//
+// ========== TAREA: Generar y enviar datos de sensores ==========
 void generateSensorData() {
   DataPacket lectura;
 
-  // timestamp sincronizado
   lectura.timestamp = syncManager.getSyncStatus() ? 
                       syncManager.getNetworkTime() : 0;
 
@@ -80,7 +99,7 @@ void generateSensorData() {
   lectura.fuego = digitalRead(27);
 
   uint32_t root = syncManager.getRootId();
-  bool online = (root != 0 && mesh.isConnected(root));
+  bool online = (root != 0 && isNodeReachable(root));
 
   if (!online) {
     Serial.println("[OFFLINE] Sin ROOT, guardando en buffer.");
@@ -88,75 +107,118 @@ void generateSensorData() {
     return;
   }
 
-  // enviar
+  // Enviar datos
   sendDataToRoot(lectura, "DATA");
 
-  // vaciar buffer si aplica
+  // Vaciar buffer pendiente si hay
   if (syncManager.hasBufferedData()) {
+    Serial.println("[BUFFER] Vaciando datos pendientes...");
     syncManager.flushBuffer(sendDataToRoot);
   }
 }
 
-//
-// Enviar lectura al ROOT
-//
+// ========== TAREA: Verificar conexión con ROOT ==========
+void checkRootConnection() {
+  uint32_t root = syncManager.getRootId();
+
+  if (root == 0) {
+    Serial.println("[CHECK] No tengo ROOT, esperando broadcast...");
+    return;
+  }
+
+  if (!isNodeReachable(root)) {
+    Serial.printf("[CHECK] ROOT %u NO alcanzable → Reseteando...\n", root);
+    syncManager.setRootId(0);
+    syncManager.setSyncStatus(false);
+    Serial.println("[CHECK] Esperando nuevo SYNC...");
+  } else {
+    auto nodes = mesh.getNodeList();
+    Serial.printf("[CHECK] ROOT %u alcanzable (%d nodos visibles)\n", 
+                  root, nodes.size());
+  }
+}
+
+// ========== ENVIAR DATOS AL ROOT ==========
 void sendDataToRoot(DataPacket reading, String tipo) {
   String jsonMsg = syncManager.createDataJSON(reading, tipo, mesh.getNodeId());
   mesh.sendSingle(syncManager.getRootId(), jsonMsg);
 
-  Serial.printf("[ONLINE] Enviando %s | humo=%d, fuego=%d | ts=%llu\n",
+  Serial.printf("[TX] %s ROOT | humo=%d, fuego=%d | ts=%llu\n",
                 tipo.c_str(), reading.humo, reading.fuego, reading.timestamp);
 }
 
-//
-// Recibir mensajes MESH
-//
+// ========== CALLBACK: Mensajes recibidos ==========
 void receivedCallback(uint32_t from, String &msg) {
   StaticJsonDocument<300> doc;
   if (deserializeJson(doc, msg)) {
-    Serial.println("[Child] Error parseando JSON");
+    Serial.println("[RX] Error parseando JSON");
     return;
   }
 
   String type = doc["type"];
 
-  // ROOT discovery (SYNC broadcast o directo)
+  // ROOT discovery via SYNC broadcast
   if (type == "SYNC") {
-    uint32_t root = doc["root"]; // siempre viene aquí
-    syncManager.setRootId(root);
+    uint32_t root = doc["root"];
+    uint32_t currentRoot = syncManager.getRootId();
 
-    Serial.printf("[CHILD] ROOT detectado: %u\n", root);
+    // Actualizar ROOT si no tengo o el anterior no está alcanzable
+    bool shouldUpdate = (currentRoot == 0) || 
+                       (root != currentRoot) || 
+                       (!isNodeReachable(currentRoot));
 
-    // Solicitamos TIME inmediatamente
-    StaticJsonDocument<128> req;
-    req["type"] = "TIME";
-    req["src"] = mesh.getNodeId();
+    if (shouldUpdate) {
+      syncManager.setRootId(root);
+      Serial.printf("[SYNC] ROOT actualizado: %u (desde nodo %u)\n", root, from);
 
-    String out;
-    serializeJson(req, out);
-    mesh.sendSingle(root, out);
+      // Solicitar TIME inmediatamente
+      StaticJsonDocument<128> req;
+      req["type"] = "TIME";
+      req["src"] = mesh.getNodeId();
 
+      String out;
+      serializeJson(req, out);
+      mesh.sendSingle(root, out);
+
+      // Vaciar buffer si hay datos pendientes
+      if (syncManager.hasBufferedData()) {
+        Serial.println("[SYNC] ROOT recuperado, vaciando buffer...");
+        delay(1000);  // Esperar estabilización de ruta
+        syncManager.flushBuffer(sendDataToRoot);
+      }
+    }
     return;
   }
 
-  // respuesta TIME del ROOT
+  // Respuesta TIME del ROOT
   if (type == "TIME") {
     syncManager.handleSyncResponse(doc);
     return;
   }
 }
 
-//
-// Evento: nuevo vecino
-//
+// ========== CALLBACK: Nueva conexión ==========
 void newConnectionCallback(uint32_t nodeId) {
-  Serial.printf("[CHILD] Nueva conexión: %u\n", nodeId);
+  Serial.printf("[MESH] Nueva conexión: %u\n", nodeId);
 
-  // intentar enviar el buffer pendiente si el root regresó
-  if (syncManager.getRootId() != 0 &&
-      mesh.isConnected(syncManager.getRootId()) &&
-      syncManager.hasBufferedData()) {
-
+  // Si ROOT vuelve a estar alcanzable, vaciar buffer
+  uint32_t root = syncManager.getRootId();
+  if (root != 0 && isNodeReachable(root) && syncManager.hasBufferedData()) {
+    Serial.println("[MESH] ROOT alcanzable, vaciando buffer...");
+    delay(500);
     syncManager.flushBuffer(sendDataToRoot);
+  }
+}
+
+// ========== CALLBACK: Topología cambió ==========
+void changedConnectionCallback() {
+  auto nodes = mesh.getNodeList();
+  Serial.printf("[MESH] Topología cambió (%d nodos visibles)\n", nodes.size());
+
+  uint32_t root = syncManager.getRootId();
+  if (root != 0 && !isNodeReachable(root)) {
+    Serial.printf("[MESH] ROOT %u perdido en cambio de topología\n", root);
+    syncManager.setRootId(0);
+    syncManager.setSyncStatus(false);
   }
 }
