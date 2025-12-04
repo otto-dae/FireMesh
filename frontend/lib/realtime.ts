@@ -5,10 +5,13 @@ import { calculateAlertLevel } from './alerts';
 
 /**
  * Estructura en Firebase:
- * /sensores/{nodeId}/
+ * /nodos/{nodeId}/
  *   - lecturas/
- *     - {key}: { fuego, humo, nodeId, serverTimestamp, timestamp, type }
- *   - ultimaConexion
+ *     - {key}: {
+ *         body: { fuego: boolean, humo: number, ts: number },
+ *         src: number (nodeId),
+ *         type: string ("DATA" o "DATA_HIST")
+ *       }
  */
 
 // Mapeo de nodeId a deviceId y metadatos
@@ -19,14 +22,27 @@ export const NODE_TO_DEVICE_MAP: Record<string, {
   latitude: number;
   longitude: number;
 }> = {
-  'node_3710082173': {
-    deviceId: 'estacionamiento',
-    name: 'Estacionamiento',
-    location: 'Estacionamiento',
+  '2805856045': {
+    deviceId: 'nodo-1',
+    name: 'Nodo Sensor 1',
+    location: 'Área A',
     latitude: 20.70476770442253,
     longitude: -100.4441135875159,
   },
-  // Agrega aquí tus otros nodos cuando los tengas
+  '3710082173': {
+    deviceId: 'nodo-2',
+    name: 'Nodo Sensor 2',
+    location: 'Área B',
+    latitude: 20.70526770442253,
+    longitude: -100.4446135875159,
+  },
+  '3710087789': {
+    deviceId: 'nodo-3',
+    name: 'Nodo Sensor 3',
+    location: 'Área C',
+    latitude: 20.70576770442253,
+    longitude: -100.4451135875159,
+  },
 };
 
 // Cache para guardar el timestamp de la última actualización POR DISPOSITIVO
@@ -64,8 +80,10 @@ function getLatestLectura(lecturas: Record<string, FirebaseLectura>): FirebaseLe
   const lecturasArray = Object.values(lecturas);
   if (lecturasArray.length === 0) return null;
   
-  // Ordenar por serverTimestamp descendente y tomar la primera
-  return lecturasArray.sort((a, b) => b.serverTimestamp - a.serverTimestamp)[0];
+  // Filtrar solo lecturas con datos válidos y ordenar por ts descendente
+  return lecturasArray
+    .filter(l => l.body && l.body.ts > 0)
+    .sort((a, b) => b.body.ts - a.body.ts)[0] || null;
 }
 
 /**
@@ -75,33 +93,32 @@ function convertFirebaseNode(
   nodeId: string,
   node: FirebaseNode
 ): RealtimeDeviceData | null {
-  console.log('🔄 Convirtiendo nodo:', nodeId, 'Lecturas:', Object.keys(node.lecturas || {}).length);
+  console.log('Convirtiendo nodo:', nodeId, 'Lecturas:', Object.keys(node.lecturas || {}).length);
   
   const deviceInfo = NODE_TO_DEVICE_MAP[nodeId];
   if (!deviceInfo) {
-    console.warn('⚠️ No se encontró deviceInfo para nodeId:', nodeId);
+    console.warn('No se encontró deviceInfo para nodeId:', nodeId);
     return null;
   }
 
   const latestLectura = getLatestLectura(node.lecturas);
   if (!latestLectura) {
-    console.warn('⚠️ No hay lecturas para nodeId:', nodeId);
+    console.warn('No hay lecturas para nodeId:', nodeId);
     return null;
   }
 
-  console.log('📊 Última lectura:', latestLectura);
-
+  console.log('Última lectura:', latestLectura);
   // No hay sensor de temperatura, usar undefined
   const temperature = undefined;
   
   const alertLevel = calculateAlertLevel({
     temperature,
-    smoke: latestLectura.humo,
-    flame: latestLectura.fuego,
+    smoke: latestLectura.body.humo,
+    flame: latestLectura.body.fuego ? 1 : 0,
   });
 
   // ✅ DETECCIÓN CORRECTA DE ESTADO ONLINE
-  const currentServerTimestamp = latestLectura.serverTimestamp;
+  const currentServerTimestamp = latestLectura.body.ts;
   const now = Date.now();
   
   // Verificar si ya vimos esta lectura antes
@@ -137,7 +154,7 @@ function convertFirebaseNode(
       : `Sin datos nuevos por ${Math.floor(tiempoSinActualizar / 1000)}s - OFFLINE`;
   }
 
-  console.log('⏰ Estado del dispositivo:', {
+  console.log('Estado del dispositivo:', {
     nodeId,
     currentServerTimestamp,
     lastSeenServerTimestamp: lastSeen?.serverTimestamp,
@@ -149,14 +166,14 @@ function convertFirebaseNode(
   const result = {
     deviceId: deviceInfo.deviceId,
     temperature,
-    smoke: latestLectura.humo,
-    flame: latestLectura.fuego,
+    smoke: latestLectura.body.humo,
+    flame: latestLectura.body.fuego ? 1 : 0,
     alertLevel,
-    timestamp: now, // Timestamp local actual para la UI
+    timestamp: latestLectura.body.ts,
     isOnline,
   };
 
-  console.log('✅ Dispositivo convertido:', result);
+  console.log('Dispositivo convertido:', result);
   return result;
 }
 
@@ -183,7 +200,7 @@ export function subscribeToDevice(
   nodeId: string,
   callback: (data: RealtimeDeviceData | null) => void
 ): () => void {
-  const nodeRef = ref(database, `sensores/${nodeId}`);
+  const nodeRef = ref(database, `nodos/${nodeId}`);
 
   onValue(nodeRef, (snapshot: DataSnapshot) => {
     if (snapshot.exists()) {
@@ -206,37 +223,37 @@ export function subscribeToDevice(
 export function subscribeToAllDevices(
   callback: (devices: Record<string, RealtimeDeviceData>) => void
 ): () => void {
-  const sensoresRef = ref(database, 'sensores');
+  const nodosRef = ref(database, 'nodos');
 
-  onValue(sensoresRef, (snapshot: DataSnapshot) => {
-    console.log('📨 Snapshot recibido. Existe:', snapshot.exists());
+  onValue(nodosRef, (snapshot: DataSnapshot) => {
+    console.log('Snapshot recibido. Existe:', snapshot.exists());
     
     if (snapshot.exists()) {
-      const sensores = snapshot.val() as Record<string, FirebaseNode>;
-      console.log('📦 Nodos encontrados:', Object.keys(sensores));
+      const nodos = snapshot.val() as Record<string, FirebaseNode>;
+      console.log('Nodos encontrados:', Object.keys(nodos));
       const devicesData: Record<string, RealtimeDeviceData> = {};
 
-      Object.entries(sensores).forEach(([nodeId, nodeData]) => {
-        console.log(`🔄 Procesando nodo: ${nodeId}`);
+      Object.entries(nodos).forEach(([nodeId, nodeData]) => {
+        console.log(`Procesando nodo: ${nodeId}`);
         const deviceData = convertFirebaseNode(nodeId, nodeData);
         if (deviceData) {
           devicesData[deviceData.deviceId] = deviceData;
         }
       });
 
-      console.log('🔥 Datos actualizados en firebase', devicesData);
+      console.log('Datos actualizados en firebase', devicesData);
       callback(devicesData);
     } else {
-      console.error('❌ No existen datos en /sensores');
+      console.error('No existen datos en /nodos');
       callback({});
     }
   }, (error) => {
-    console.error('❌ Error en subscribeToAllDevices:', error);
+    console.error('Error en subscribeToAllDevices:', error);
   });
 
   return () => {
-    console.log('🔕 Desuscribiendo de todos los sensores');
-    off(sensoresRef);
+    console.log('Desuscribiendo de todos los nodos');
+    off(nodosRef);
   };
 }
 
@@ -247,37 +264,38 @@ export function subscribeToDeviceReadings(
   deviceId: string,
   callback: (readings: FirebaseLectura[]) => void
 ): () => void {
-  console.log('🔔 subscribeToDeviceReadings para:', deviceId);
+  console.log('SubscribeToDeviceReadings para:', deviceId);
   
   const nodeId = getNodeIdFromDeviceId(deviceId);
   if (!nodeId) {
-    console.error('❌ No se encontró nodeId para deviceId:', deviceId);
+    console.error('No se encontró nodeId para deviceId:', deviceId);
     callback([]);
     return () => {};
   }
 
-  const lecturasRef = ref(database, `sensores/${nodeId}/lecturas`);
-  console.log('📡 Suscribiendo a lecturas en:', `sensores/${nodeId}/lecturas`);
+  const lecturasRef = ref(database, `nodos/${nodeId}/lecturas`);
+  console.log('Suscribiendo a lecturas en:', `nodos/${nodeId}/lecturas`);
 
   onValue(lecturasRef, (snapshot: DataSnapshot) => {
-    console.log('📨 Lecturas recibidas. Existe:', snapshot.exists());
+    console.log('Lecturas recibidas. Existe:', snapshot.exists());
     
     if (snapshot.exists()) {
       const lecturasObj = snapshot.val() as Record<string, FirebaseLectura>;
       const lecturasArray = Object.values(lecturasObj)
-        .sort((a, b) => b.serverTimestamp - a.serverTimestamp);
-      console.log('✅ Lecturas procesadas:', lecturasArray.length);
+        .filter(l => l.body && l.body.ts > 0)
+        .sort((a, b) => b.body.ts - a.body.ts);
+      console.log('Lecturas procesadas:', lecturasArray.length);
       callback(lecturasArray);
     } else {
-      console.warn('⚠️ No hay lecturas para:', deviceId);
+      console.warn('No hay lecturas para:', deviceId);
       callback([]);
     }
   }, (error) => {
-    console.error('❌ Error en subscribeToDeviceReadings:', error);
+    console.error('Error en subscribeToDeviceReadings:', error);
   });
 
   return () => {
-    console.log('🔕 Desuscribiendo de lecturas:', deviceId);
+    console.log('Desuscribiendo de lecturas:', deviceId);
     off(lecturasRef);
   };
 }

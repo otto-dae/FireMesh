@@ -33,7 +33,7 @@ export default function DeviceDetailPage() {
 
   useEffect(() => {
     if (!deviceInfo) {
-      setLoading(false);
+      setTimeout(() => setLoading(false), 0);
       return;
     }
 
@@ -65,20 +65,14 @@ export default function DeviceDetailPage() {
   }
 
   const latestReading = readings[0];
-  
-  const alertLevel = latestReading ? calculateAlertLevel({
-    temperature: undefined,
-    smoke: latestReading.humo,
-    flame: latestReading.fuego,
-  }) : 'NORMAL';
 
   const chartData = readings
     .slice(0, 50)
     .reverse()
     .map((reading) => ({
-      time: format(new Date(reading.timestamp || reading.serverTimestamp), 'HH:mm:ss'),
-      smoke: reading.humo,
-      flame: reading.fuego,
+      time: format(new Date(reading.body.ts), 'HH:mm:ss'),
+      smoke: reading.body.humo,
+      flame: reading.body.fuego ? 1 : 0,
     }));
 
   return (
@@ -119,7 +113,7 @@ export default function DeviceDetailPage() {
                 <div className="text-2xl font-bold">N/A</div>
                 <p className="text-xs text-muted-foreground">
                   <Clock className="inline h-3 w-3 mr-1" />
-                  {format(new Date(latestReading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
+                  {format(new Date(latestReading.body.ts), "d 'de' MMM, HH:mm:ss", {
                     locale: es,
                   })}
                 </p>
@@ -132,10 +126,10 @@ export default function DeviceDetailPage() {
                 <Wind className="h-4 w-4 text-gray-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{latestReading.humo.toFixed(0)} ppm</div>
+                <div className="text-2xl font-bold">{latestReading.body.humo.toFixed(0)} ppm</div>
                 <p className="text-xs text-muted-foreground">
                   <Clock className="inline h-3 w-3 mr-1" />
-                  {format(new Date(latestReading.timestamp || latestReading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
+                  {format(new Date(latestReading.body.ts), "d 'de' MMM, HH:mm:ss", {
                     locale: es,
                   })}
                 </p>
@@ -148,10 +142,10 @@ export default function DeviceDetailPage() {
                 <Flame className="h-4 w-4 text-red-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{latestReading.fuego}</div>
+                <div className="text-2xl font-bold">{latestReading.body.fuego ? 'Sí' : 'No'}</div>
                 <p className="text-xs text-muted-foreground">
                   <Clock className="inline h-3 w-3 mr-1" />
-                  {format(new Date(latestReading.timestamp || latestReading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
+                  {format(new Date(latestReading.body.ts), "d 'de' MMM, HH:mm:ss", {
                     locale: es,
                   })}
                 </p>
@@ -220,19 +214,19 @@ export default function DeviceDetailPage() {
                     {readings.slice(0, 20).map((reading, index) => {
                       const alert = calculateAlertLevel({
                         temperature: undefined,
-                        smoke: reading.humo,
-                        flame: reading.fuego,
+                        smoke: reading.body.humo,
+                        flame: reading.body.fuego ? 1 : 0,
                       });
                       return (
                         <TableRow key={index}>
                           <TableCell>
-                            {format(new Date(reading.timestamp || reading.serverTimestamp), "d 'de' MMM, HH:mm:ss", {
+                            {format(new Date(reading.body.ts), "d 'de' MMM, HH:mm:ss", {
                               locale: es,
                             })}
                           </TableCell>
                           <TableCell>N/A</TableCell>
-                          <TableCell>{reading.humo.toFixed(0)} ppm</TableCell>
-                          <TableCell>{reading.fuego}</TableCell>
+                          <TableCell>{reading.body.humo.toFixed(0)} ppm</TableCell>
+                          <TableCell>{reading.body.fuego ? 'Sí' : 'No'}</TableCell>
                           <TableCell>
                             <Badge
                               variant={
