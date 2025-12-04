@@ -38,7 +38,6 @@ function DeviceMap({
     }
 
     try {
-      console.log('🗺️ Inicializando mapa');
       
       const map = L.map(mapContainerRef.current, {
         center,
@@ -52,13 +51,10 @@ function DeviceMap({
       }).addTo(map);
 
       mapRef.current = map;
-      console.log('✅ Mapa inicializado correctamente');
     } catch (error) {
-      console.error('❌ Error inicializando mapa:', error);
     }
 
     return () => {
-      console.log('🧹 Limpiando mapa...');
       if (mapRef.current) {
         try {
           markersRef.current.forEach((marker) => {
@@ -68,7 +64,6 @@ function DeviceMap({
           mapRef.current.remove();
           mapRef.current = null;
         } catch (error) {
-          console.error('❌ Error destruyendo mapa:', error);
         }
       }
     };
@@ -84,11 +79,6 @@ function DeviceMap({
     const currentMarkers = markersRef.current;
     const shouldAdjustView = currentMarkers.size === 0;
 
-    console.log('🗺️ DeviceMap: Actualizando marcadores', {
-      deviceCount: devices.length,
-      shouldAdjustView,
-    });
-
     // Actualizar o crear marcadores
     devices.forEach((device) => {
       const existingMarker = currentMarkers.get(device.deviceId);
@@ -102,13 +92,11 @@ function DeviceMap({
           // Actualizar el contenido del popup sin recrearlo
           existingMarker.setPopupContent(createPopupContent(device));
           
-          console.log(`🔄 Marcador actualizado: ${device.deviceId}`);
         } catch (error) {
-          console.error(`❌ Error actualizando marcador ${device.deviceId}:`, error);
+          console.error(`Error actualizando marcador ${device.deviceId}:`, error);
         }
       } else {
         try {
-          console.log(`➕ Creando marcador: ${device.deviceId}`);
 
           const color = getAlertHexColor(device.alertLevel);
           const icon = createCustomIcon(color, device.isOnline);
@@ -121,9 +109,8 @@ function DeviceMap({
             });
 
           currentMarkers.set(device.deviceId, marker);
-          console.log(`✅ Marcador creado: ${device.deviceId}`);
         } catch (error) {
-          console.error(`❌ Error creando marcador ${device.deviceId}:`, error);
+          console.error(`Error creando marcador ${device.deviceId}:`, error);
         }
       }
     });
@@ -142,12 +129,11 @@ function DeviceMap({
       try {
         const bounds = L.latLngBounds(devices.map((d) => [d.latitude, d.longitude]));
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 17 });
-        console.log('✅ Vista ajustada (primera carga)');
       } catch (error) {
-        console.error('❌ Error ajustando vista:', error);
+        console.error('Error ajustando vista:', error);
       }
     } else {
-      console.log('⏭️ Vista del mapa no se ajustó');
+      console.log('V1ista del mapa no se ajustó');
     }
   }, [devices]);
 

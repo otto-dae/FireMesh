@@ -54,7 +54,6 @@ export default function Dashboard() {
   // Suscribirse a datos en tiempo real (Firebase)
   useEffect(() => {
     const unsubscribe = subscribeToAllDevices((data) => {
-      console.log('🔄 Actualizando dispositivos con datos en tiempo real');
       
       // Actualizar dispositivos con datos en tiempo real
       setDevices((prevDevices) =>
@@ -71,11 +70,9 @@ export default function Dashboard() {
               device.lastReading.flame !== rtData.flame;
             
             if (!hasChanges) {
-              console.log('⏭️ Sin cambios para', device.deviceId);
               return device; // Retornar la misma referencia si no hay cambios
             }
             
-            console.log('✅ Actualizando', device.deviceId, 'con nuevos datos');
             return {
               ...device,
               alertLevel: rtData.alertLevel,

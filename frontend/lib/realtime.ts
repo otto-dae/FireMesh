@@ -93,22 +93,21 @@ function convertFirebaseNode(
   nodeId: string,
   node: FirebaseNode
 ): RealtimeDeviceData | null {
-  console.log('🔄 Convirtiendo nodo:', nodeId, 'Lecturas:', Object.keys(node.lecturas || {}).length);
+  console.log('Convirtiendo nodo:', nodeId, 'Lecturas:', Object.keys(node.lecturas || {}).length);
   
   const deviceInfo = NODE_TO_DEVICE_MAP[nodeId];
   if (!deviceInfo) {
-    console.warn('⚠️ No se encontró deviceInfo para nodeId:', nodeId);
+    console.warn('No se encontró deviceInfo para nodeId:', nodeId);
     return null;
   }
 
   const latestLectura = getLatestLectura(node.lecturas);
   if (!latestLectura) {
-    console.warn('⚠️ No hay lecturas para nodeId:', nodeId);
+    console.warn('No hay lecturas para nodeId:', nodeId);
     return null;
   }
 
-  console.log('📊 Última lectura:', latestLectura);
-
+  console.log('Última lectura:', latestLectura);
   // No hay sensor de temperatura, usar undefined
   const temperature = undefined;
   
@@ -155,7 +154,7 @@ function convertFirebaseNode(
       : `Sin datos nuevos por ${Math.floor(tiempoSinActualizar / 1000)}s - OFFLINE`;
   }
 
-  console.log('⏰ Estado del dispositivo:', {
+  console.log('Estado del dispositivo:', {
     nodeId,
     currentServerTimestamp,
     lastSeenServerTimestamp: lastSeen?.serverTimestamp,
@@ -174,7 +173,7 @@ function convertFirebaseNode(
     isOnline,
   };
 
-  console.log('✅ Dispositivo convertido:', result);
+  console.log('Dispositivo convertido:', result);
   return result;
 }
 
@@ -227,33 +226,33 @@ export function subscribeToAllDevices(
   const nodosRef = ref(database, 'nodos');
 
   onValue(nodosRef, (snapshot: DataSnapshot) => {
-    console.log('📨 Snapshot recibido. Existe:', snapshot.exists());
+    console.log('Snapshot recibido. Existe:', snapshot.exists());
     
     if (snapshot.exists()) {
       const nodos = snapshot.val() as Record<string, FirebaseNode>;
-      console.log('📦 Nodos encontrados:', Object.keys(nodos));
+      console.log('Nodos encontrados:', Object.keys(nodos));
       const devicesData: Record<string, RealtimeDeviceData> = {};
 
       Object.entries(nodos).forEach(([nodeId, nodeData]) => {
-        console.log(`🔄 Procesando nodo: ${nodeId}`);
+        console.log(`Procesando nodo: ${nodeId}`);
         const deviceData = convertFirebaseNode(nodeId, nodeData);
         if (deviceData) {
           devicesData[deviceData.deviceId] = deviceData;
         }
       });
 
-      console.log('🔥 Datos actualizados en firebase', devicesData);
+      console.log('Datos actualizados en firebase', devicesData);
       callback(devicesData);
     } else {
-      console.error('❌ No existen datos en /nodos');
+      console.error('No existen datos en /nodos');
       callback({});
     }
   }, (error) => {
-    console.error('❌ Error en subscribeToAllDevices:', error);
+    console.error('Error en subscribeToAllDevices:', error);
   });
 
   return () => {
-    console.log('🔕 Desuscribiendo de todos los nodos');
+    console.log('Desuscribiendo de todos los nodos');
     off(nodosRef);
   };
 }
@@ -265,38 +264,38 @@ export function subscribeToDeviceReadings(
   deviceId: string,
   callback: (readings: FirebaseLectura[]) => void
 ): () => void {
-  console.log('🔔 subscribeToDeviceReadings para:', deviceId);
+  console.log('SubscribeToDeviceReadings para:', deviceId);
   
   const nodeId = getNodeIdFromDeviceId(deviceId);
   if (!nodeId) {
-    console.error('❌ No se encontró nodeId para deviceId:', deviceId);
+    console.error('No se encontró nodeId para deviceId:', deviceId);
     callback([]);
     return () => {};
   }
 
   const lecturasRef = ref(database, `nodos/${nodeId}/lecturas`);
-  console.log('📡 Suscribiendo a lecturas en:', `nodos/${nodeId}/lecturas`);
+  console.log('Suscribiendo a lecturas en:', `nodos/${nodeId}/lecturas`);
 
   onValue(lecturasRef, (snapshot: DataSnapshot) => {
-    console.log('📨 Lecturas recibidas. Existe:', snapshot.exists());
+    console.log('Lecturas recibidas. Existe:', snapshot.exists());
     
     if (snapshot.exists()) {
       const lecturasObj = snapshot.val() as Record<string, FirebaseLectura>;
       const lecturasArray = Object.values(lecturasObj)
         .filter(l => l.body && l.body.ts > 0)
         .sort((a, b) => b.body.ts - a.body.ts);
-      console.log('✅ Lecturas procesadas:', lecturasArray.length);
+      console.log('Lecturas procesadas:', lecturasArray.length);
       callback(lecturasArray);
     } else {
-      console.warn('⚠️ No hay lecturas para:', deviceId);
+      console.warn('No hay lecturas para:', deviceId);
       callback([]);
     }
   }, (error) => {
-    console.error('❌ Error en subscribeToDeviceReadings:', error);
+    console.error('Error en subscribeToDeviceReadings:', error);
   });
 
   return () => {
-    console.log('🔕 Desuscribiendo de lecturas:', deviceId);
+    console.log('Desuscribiendo de lecturas:', deviceId);
     off(lecturasRef);
   };
 }
